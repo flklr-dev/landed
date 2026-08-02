@@ -1,0 +1,12 @@
+{
+  "name": "@landed/api",
+  "version": "0.0.1",
+  "private": true,
+  "description": "Express API — request/response layer. Phase 2.",
+  "scripts": {
+    "dev": "echo 'API not yet implemented'",
+    "build": "echo 'API not yet implemented'",
+    "lint": "echo 'skip'",
+    "typecheck": "echo 'skip'"
+  }
+}

@@ -1,0 +1,12 @@
+{
+  "name": "@landed/worker",
+  "version": "0.0.1",
+  "private": true,
+  "description": "AI pipeline worker — SQS consumer, LLM extraction, embeddings. Phase 2.",
+  "scripts": {
+    "dev": "echo 'Worker not yet implemented'",
+    "build": "echo 'Worker not yet implemented'",
+    "lint": "echo 'skip'",
+    "typecheck": "echo 'skip'"
+  }
+}

@@ -1,0 +1,185 @@
+@import "tailwindcss";
+
+/* ─────────────────────────────────────────────────────────────────────────────
+   Landed Design System
+   Tailwind v4 — tokens defined via @theme so they work as both CSS vars
+   and Tailwind utilities (e.g. bg-bg, text-ink, border-line, etc.)
+   Source of truth: DESIGN.md
+──────────────────────────────────────────────────────────────────────────────*/
+
+/* ── Design tokens via @theme ──────────────────────────────────────────────── */
+@theme {
+  /* Colors */
+  --color-bg: #f6f4f0;
+  --color-ink: #191917;
+  --color-ink-muted: #44433f;
+  --color-line: #c9c8c1;
+  --color-panel: #151512;
+  --color-panel-fg: #f1f0ea;
+  --color-signal: #f5a05c;
+
+  /* Typography */
+  --font-display: "General Sans", Inter, system-ui, sans-serif;
+  --font-ui: Inter, system-ui, sans-serif;
+  --font-serif: Newsreader, Georgia, serif;
+  --font-mono: "JetBrains Mono", "IBM Plex Mono", monospace;
+
+  /* Radius — DESIGN.md: 4–6px on interactive, 0 on structural */
+  --radius-sm: 4px;
+  --radius-md: 6px;
+  --radius-lg: 8px;
+  --radius-full: 9999px;
+  --radius-none: 0px;
+
+  /* Transitions */
+  --transition-fast: 120ms ease;
+  --transition-base: 200ms ease;
+  --transition-slow: 350ms ease;
+
+  /* Shadows — DESIGN.md: no shadows on structural, hairlines only */
+  --shadow-none: none;
+  --shadow-sm: 0 1px 2px 0 rgb(25 25 23 / 0.06);
+  --shadow-md: 0 4px 16px 0 rgb(25 25 23 / 0.08);
+}
+
+/* ── Base defaults ───────────────────────────────────────────────────────────── */
+html {
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
+  scroll-behavior: smooth;
+}
+
+body {
+  background-color: var(--color-bg);
+  color: var(--color-ink);
+  font-family: var(--font-ui);
+  line-height: 1.6;
+}
+
+/* ── Typography helpers ─────────────────────────────────────────────────────── */
+
+/* DESIGN.md: uppercase + letter-spaced mono for metadata labels */
+.label-mono {
+  font-family: var(--font-mono);
+  font-size: 0.6875rem;
+  font-weight: 500;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+  color: var(--color-ink-muted);
+}
+
+/* DESIGN.md: hairline dividers — 1px, always --line, never shadows */
+.divider {
+  border: none;
+  border-top: 1px solid var(--color-line);
+}
+
+/* ── Scrollbar ─────────────────────────────────────────────────────────────── */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: var(--color-line);
+  border-radius: var(--radius-full);
+}
+::-webkit-scrollbar-thumb:hover {
+  background: var(--color-ink-muted);
+}
+
+/* ── Focus visible ─────────────────────────────────────────────────────────── */
+:focus-visible {
+  outline: 2px solid var(--color-signal);
+  outline-offset: 2px;
+}
+
+/* ── Selection ──────────────────────────────────────────────────────────────── */
+::selection {
+  background: var(--color-signal);
+  color: var(--color-panel);
+}
+
+/* ── Animations ─────────────────────────────────────────────────────────────── */
+@keyframes fade-in {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes fade-in-scale {
+  from {
+    opacity: 0;
+    transform: scale(0.96);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+@keyframes slide-in-right {
+  from {
+    opacity: 0;
+    transform: translateX(16px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+@keyframes pulse-signal {
+  0%, 100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.5;
+  }
+}
+
+@keyframes shimmer {
+  0% {
+    background-position: -200% 0;
+  }
+  100% {
+    background-position: 200% 0;
+  }
+}
+
+.animate-fade-in {
+  animation: fade-in 0.3s var(--transition-base) both;
+}
+
+.animate-fade-in-scale {
+  animation: fade-in-scale 0.25s ease both;
+}
+
+.animate-slide-in-right {
+  animation: slide-in-right 0.25s ease both;
+}
+
+.animate-pulse-signal {
+  animation: pulse-signal 2s ease-in-out infinite;
+}
+
+/* Skeleton shimmer for loading states */
+.skeleton {
+  background: linear-gradient(
+    90deg,
+    var(--color-line) 25%,
+    #e8e6e0 50%,
+    var(--color-line) 75%
+  );
+  background-size: 200% 100%;
+  animation: shimmer 1.5s infinite;
+  border-radius: var(--radius-sm);
+}
