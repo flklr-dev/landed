@@ -104,7 +104,7 @@ export function JobTable({
               value={statusFilter}
               aria-label="Filter by status"
               onChange={(e) => setStatusFilter(e.target.value)}
-              className="h-9 px-3 pr-8 bg-bg text-ink text-xs font-mono uppercase tracking-wider border border-line rounded-md focus:outline-none focus:border-ink/50 cursor-pointer appearance-none"
+              className="h-9 px-3 pr-9 bg-bg text-ink text-xs font-mono uppercase tracking-wider border border-line rounded-md focus:outline-none focus:border-ink/50 cursor-pointer appearance-none"
             >
               <option value="all">All Statuses ({jobs.length})</option>
               {STATUS_OPTIONS.map((opt) => (
@@ -113,7 +113,7 @@ export function JobTable({
                 </option>
               ))}
             </select>
-            <ChevronDown size={14} className="absolute right-2.5 top-2.5 text-ink-muted pointer-events-none" />
+            <ChevronDown size={14} className="absolute right-3 top-2.5 text-ink-muted pointer-events-none" />
           </div>
         </div>
 
@@ -275,7 +275,7 @@ export function JobTable({
               value={pageSize}
               aria-label="Rows per page"
               onChange={(e) => setPageSize(Number(e.target.value))}
-              className="h-7 px-2 pr-6 bg-bg text-ink text-xs font-mono border border-line rounded-md focus:outline-none focus:border-ink/50 cursor-pointer appearance-none"
+              className="h-7 px-2 pr-7 bg-bg text-ink text-xs font-mono border border-line rounded-md focus:outline-none focus:border-ink/50 cursor-pointer appearance-none"
             >
               {PAGE_SIZE_OPTIONS.map((size) => (
                 <option key={size} value={size}>
@@ -283,7 +283,7 @@ export function JobTable({
                 </option>
               ))}
             </select>
-            <ChevronDown size={12} className="absolute right-1.5 top-2 text-ink-muted pointer-events-none" />
+            <ChevronDown size={12} className="absolute right-2.5 top-2 text-ink-muted pointer-events-none" />
           </div>
           <span>per page</span>
         </div>

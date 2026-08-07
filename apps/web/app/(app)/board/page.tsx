@@ -20,6 +20,12 @@ import {
   ExternalLink,
   Clock,
   LayoutGrid,
+  ChevronDown,
+  Building2,
+  Calendar,
+  FileText,
+  CheckCircle2,
+  Trash2,
   Table as TableIcon,
 } from 'lucide-react';
 
@@ -202,55 +208,64 @@ function AddJobModal({
             />
             <div className="flex flex-col gap-1.5">
               <label htmlFor="job-type-select" className="text-sm font-medium text-ink">Job Type</label>
-              <select
-                id="job-type-select"
-                value={jobType}
-                onChange={(e) => setJobType(e.target.value as Job['jobType'])}
-                className="w-full bg-bg text-ink text-sm border border-line rounded-md px-3 py-2 h-[38px] focus:outline-none focus:border-ink/50"
-              >
-                <option value="full-time">Full-Time</option>
-                <option value="contract">Contract</option>
-                <option value="part-time">Part-Time</option>
-                <option value="freelance">Freelance</option>
-                <option value="internship">Internship</option>
-              </select>
+              <div className="relative">
+                <select
+                  id="job-type-select"
+                  value={jobType}
+                  onChange={(e) => setJobType(e.target.value as Job['jobType'])}
+                  className="w-full bg-bg text-ink text-sm border border-line rounded-md pl-3 pr-8 py-2 h-[38px] focus:outline-none focus:border-ink/50 appearance-none cursor-pointer"
+                >
+                  <option value="full-time">Full-Time</option>
+                  <option value="contract">Contract</option>
+                  <option value="part-time">Part-Time</option>
+                  <option value="freelance">Freelance</option>
+                  <option value="internship">Internship</option>
+                </select>
+                <ChevronDown size={14} className="absolute right-3 top-1/2 -translate-y-1/2 text-ink-muted pointer-events-none" />
+              </div>
             </div>
             <div className="flex flex-col gap-1.5">
               <label htmlFor="job-level-select" className="text-sm font-medium text-ink">Level</label>
-              <select
-                id="job-level-select"
-                value={experienceLevel}
-                onChange={(e) => setExperienceLevel(e.target.value)}
-                className="w-full bg-bg text-ink text-sm border border-line rounded-md px-3 py-2 h-[38px] focus:outline-none focus:border-ink/50"
-              >
-                <option value="Entry Level">Entry Level</option>
-                <option value="Mid">Mid Level</option>
-                <option value="Senior">Senior</option>
-                <option value="Lead">Lead / Staff</option>
-                <option value="Executive">Executive</option>
-              </select>
+              <div className="relative">
+                <select
+                  id="job-level-select"
+                  value={experienceLevel}
+                  onChange={(e) => setExperienceLevel(e.target.value)}
+                  className="w-full bg-bg text-ink text-sm border border-line rounded-md pl-3 pr-8 py-2 h-[38px] focus:outline-none focus:border-ink/50 appearance-none cursor-pointer"
+                >
+                  <option value="Entry Level">Entry Level</option>
+                  <option value="Mid">Mid Level</option>
+                  <option value="Senior">Senior</option>
+                  <option value="Lead">Lead / Staff</option>
+                  <option value="Executive">Executive</option>
+                </select>
+                <ChevronDown size={14} className="absolute right-3 top-1/2 -translate-y-1/2 text-ink-muted pointer-events-none" />
+              </div>
             </div>
           </div>
 
           {/* Row 3: Currency, Salary Amount, Status */}
-          <div className="grid grid-cols-[90px_1fr_1fr] gap-3">
+          <div className="grid grid-cols-[115px_1fr_1fr] gap-3">
             <div className="flex flex-col gap-1.5">
               <label htmlFor="currency-select" className="text-sm font-medium text-ink">Currency</label>
-              <select
-                id="currency-select"
-                value={currency}
-                onChange={(e) => setCurrency(e.target.value)}
-                className="w-full bg-bg text-ink text-sm border border-line rounded-md px-2 py-2 h-[38px] focus:outline-none focus:border-ink/50 font-mono"
-              >
-                <option value="$">USD ($)</option>
-                <option value="₱">PHP (₱)</option>
-                <option value="€">EUR (€)</option>
-                <option value="£">GBP (£)</option>
-                <option value="A$">AUD (A$)</option>
-                <option value="C$">CAD (C$)</option>
-                <option value="S$">SGD (S$)</option>
-                <option value="¥">JPY (¥)</option>
-              </select>
+              <div className="relative">
+                <select
+                  id="currency-select"
+                  value={currency}
+                  onChange={(e) => setCurrency(e.target.value)}
+                  className="w-full bg-bg text-ink text-sm border border-line rounded-md pl-2 pr-7 py-2 h-[38px] focus:outline-none focus:border-ink/50 font-mono appearance-none cursor-pointer"
+                >
+                  <option value="$">USD ($)</option>
+                  <option value="₱">PHP (₱)</option>
+                  <option value="€">EUR (€)</option>
+                  <option value="£">GBP (£)</option>
+                  <option value="A$">AUD (A$)</option>
+                  <option value="C$">CAD (C$)</option>
+                  <option value="S$">SGD (S$)</option>
+                  <option value="¥">JPY (¥)</option>
+                </select>
+                <ChevronDown size={13} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-ink-muted pointer-events-none" />
+              </div>
             </div>
             <Input
               label="Salary Amount"
@@ -260,18 +275,21 @@ function AddJobModal({
             />
             <div className="flex flex-col gap-1.5">
               <label htmlFor="job-status-select" className="text-sm font-medium text-ink">Status</label>
-              <select
-                id="job-status-select"
-                value={status}
-                onChange={(e) => setStatus(e.target.value as JobStatus)}
-                className="w-full bg-bg text-ink text-sm border border-line rounded-md px-3 py-2 h-[38px] focus:outline-none focus:border-ink/50 capitalize"
-              >
-                <option value="saved">Saved</option>
-                <option value="applied">Applied</option>
-                <option value="interview">Interview</option>
-                <option value="offer">Offer</option>
-                <option value="rejected">Rejected</option>
-              </select>
+              <div className="relative">
+                <select
+                  id="job-status-select"
+                  value={status}
+                  onChange={(e) => setStatus(e.target.value as JobStatus)}
+                  className="w-full bg-bg text-ink text-sm border border-line rounded-md pl-3 pr-8 py-2 h-[38px] focus:outline-none focus:border-ink/50 capitalize appearance-none cursor-pointer"
+                >
+                  <option value="saved">Saved</option>
+                  <option value="applied">Applied</option>
+                  <option value="interview">Interview</option>
+                  <option value="offer">Offer</option>
+                  <option value="rejected">Rejected</option>
+                </select>
+                <ChevronDown size={14} className="absolute right-3 top-1/2 -translate-y-1/2 text-ink-muted pointer-events-none" />
+              </div>
             </div>
           </div>
 
@@ -312,52 +330,95 @@ function AddJobModal({
 
 // ── Job Detail Modal ──────────────────────────────────────────────────────────
 
-function JobDetailModal({ job, onClose }: { job: Job | null; onClose: () => void }) {
+function JobDetailModal({
+  job,
+  onClose,
+  onStatusChange,
+  onDeleteJob,
+}: {
+  job: Job | null;
+  onClose: () => void;
+  onStatusChange?: (jobId: string, newStatus: JobStatus) => void;
+  onDeleteJob?: (jobId: string) => void;
+}) {
   if (!job) return null;
 
-  function formatDate(iso: string) {
+  function formatDate(iso?: string) {
+    if (!iso) return '—';
     return new Date(iso).toLocaleDateString('en-US', {
-      year: 'numeric',
       month: 'short',
       day: 'numeric',
+      year: 'numeric',
     });
   }
 
+  function formatJobType(type?: string): string {
+    if (!type) return '';
+    return type
+      .split('-')
+      .map((w) => w.charAt(0).toUpperCase() + w.slice(1))
+      .join(' ');
+  }
+
   return (
-    <Modal open={!!job} onClose={onClose} title={job.title} size="lg">
+    <Modal open={!!job} onClose={onClose} size="md">
       <div className="space-y-4">
-        {/* Header info */}
-        <div className="flex items-center gap-4 flex-wrap">
-          <Badge variant={job.status} label={job.status} dot />
-          <span className="text-sm text-ink-muted">{job.company}</span>
-          {job.location && (
-            <span className="text-sm text-ink-muted flex items-center gap-1">
-              <MapPin size={12} /> {job.remoteType === 'remote' ? 'Remote' : job.location}
-            </span>
-          )}
-          {job.salaryRaw && <span className="text-sm text-ink-muted">{job.salaryRaw}</span>}
+        {/* Company & Interactive Status Header */}
+        <div className="flex items-center justify-between gap-3">
+          <span className="font-mono text-xs font-semibold text-ink-muted uppercase tracking-wider">
+            {job.company}
+          </span>
+          <div className="relative">
+            <select
+              value={job.status}
+              aria-label={`Change status for ${job.title}`}
+              onChange={(e) => onStatusChange?.(job.id, e.target.value as JobStatus)}
+              className="opacity-0 absolute inset-0 w-full h-full cursor-pointer z-10"
+            >
+              <option value="saved">Saved</option>
+              <option value="applied">Applied</option>
+              <option value="interview">Interview</option>
+              <option value="offer">Offer</option>
+              <option value="rejected">Rejected</option>
+            </select>
+            <Badge variant={job.status} label={job.status} dot />
+          </div>
         </div>
 
-        {/* Timeline */}
-        <div className="flex items-center gap-2 text-xs font-mono text-ink-muted">
-          <Clock size={11} />
-          Added {formatDate(job.createdAt)}
-          {job.appliedAt && ` · Applied ${formatDate(job.appliedAt)}`}
+        {/* Role Title */}
+        <h2 className="text-xl font-bold text-ink leading-snug">{job.title}</h2>
+
+        {/* Clean 2x2 Metadata Grid with Icons */}
+        <div className="grid grid-cols-2 gap-y-2 gap-x-4 text-xs font-mono text-ink-muted">
+          <span className="flex items-center gap-1.5 truncate">
+            <MapPin size={13} className="text-ink-muted shrink-0" />
+            <span className="truncate">{job.location ? (job.remoteType === 'remote' ? 'Remote' : job.location) : 'Remote'}</span>
+          </span>
+          <span className="flex items-center gap-1.5 truncate">
+            <Briefcase size={13} className="text-ink-muted shrink-0" />
+            <span className="truncate">{formatJobType(job.jobType)} {job.experienceLevel ? `(${job.experienceLevel})` : ''}</span>
+          </span>
+          <span className="flex items-center gap-1.5 truncate">
+            <DollarSign size={13} className="text-ink-muted shrink-0" />
+            <span className="truncate">{job.salaryRaw || 'Salary not specified'}</span>
+          </span>
+          <span className="flex items-center gap-1.5 truncate">
+            <Calendar size={13} className="text-ink-muted shrink-0" />
+            <span className="truncate">Added {formatDate(job.createdAt)}</span>
+          </span>
         </div>
 
-        <div className="h-px bg-line" />
-
-        {/* Skills */}
+        {/* Required Skills */}
         {job.requiredSkills.length > 0 && (
-          <div>
-            <p className="text-xs font-mono uppercase tracking-widest text-ink-muted mb-2">
+          <div className="space-y-1.5">
+            <p className="text-[10px] font-mono uppercase tracking-widest text-ink-muted font-medium">
               Required Skills
             </p>
             <div className="flex flex-wrap gap-1.5">
               {job.requiredSkills.map((skill) => (
                 <span
                   key={skill}
-                  className="text-xs px-2 py-1 bg-ink/6 text-ink-muted rounded-sm font-mono"
+                  className="text-xs px-2 py-0.5 bg-ink/5 text-ink rounded-sm font-mono"
                 >
                   {skill}
                 </span>
@@ -366,39 +427,59 @@ function JobDetailModal({ job, onClose }: { job: Job | null; onClose: () => void
           </div>
         )}
 
+        {/* Description (About the Role) */}
+        {job.description && (
+          <div className="space-y-1.5">
+            <p className="text-[10px] font-mono uppercase tracking-widest text-ink-muted font-medium">
+              About the Role
+            </p>
+            <p className="text-sm text-ink-muted leading-relaxed">
+              {job.description}
+            </p>
+          </div>
+        )}
+
         {/* Notes */}
         {job.notes && (
-          <div>
-            <p className="text-xs font-mono uppercase tracking-widest text-ink-muted mb-2">
+          <div className="space-y-1.5">
+            <p className="text-[10px] font-mono uppercase tracking-widest text-ink-muted font-medium">
               Notes
             </p>
-            <p className="text-sm text-ink leading-relaxed">{job.notes}</p>
-          </div>
-        )}
-
-        {/* Description */}
-        {job.description && (
-          <div>
-            <p className="text-xs font-mono uppercase tracking-widest text-ink-muted mb-2">
-              About the role
+            <p className="text-sm text-ink leading-relaxed">
+              {job.notes}
             </p>
-            <p className="text-sm text-ink-muted leading-relaxed">{job.description}</p>
           </div>
         )}
 
-        {/* Actions */}
-        <div className="flex items-center gap-2 pt-1">
-          {job.sourceUrl && (
-            <a href={job.sourceUrl} target="_blank" rel="noopener noreferrer">
-              <Button variant="secondary" size="sm">
-                <ExternalLink size={13} />
-                View Posting
-              </Button>
-            </a>
-          )}
-          <Button variant="ghost" size="sm" onClick={onClose} className="ml-auto">
-            Close
-          </Button>
+        {/* Actions Footer */}
+        <div className="flex items-center justify-between gap-3 pt-3 border-t border-line">
+          <button
+            onClick={() => {
+              if (confirm('Delete this job application?')) {
+                onDeleteJob?.(job.id);
+                onClose();
+              }
+            }}
+            className="p-1.5 text-ink-muted hover:text-red-600 transition-colors rounded"
+            title="Delete Application"
+            aria-label="Delete application"
+          >
+            <Trash2 size={15} />
+          </button>
+
+          <div className="flex items-center gap-2">
+            {job.sourceUrl && (
+              <a href={job.sourceUrl} target="_blank" rel="noopener noreferrer">
+                <Button size="sm">
+                  <ExternalLink size={13} />
+                  View Posting
+                </Button>
+              </a>
+            )}
+            <Button variant="secondary" size="sm" onClick={onClose}>
+              Close
+            </Button>
+          </div>
         </div>
       </div>
     </Modal>
@@ -417,10 +498,13 @@ export default function BoardPage() {
     setJobs((prev) =>
       prev.map((j) => (j.id === jobId ? { ...j, status: newStatus, updatedAt: new Date().toISOString() } : j))
     );
+    // Keep selectedJob state updated if open
+    setSelectedJob((prev) => (prev && prev.id === jobId ? { ...prev, status: newStatus } : prev));
   };
 
   const handleDeleteJob = (jobId: string) => {
     setJobs((prev) => prev.filter((j) => j.id !== jobId));
+    setSelectedJob(null);
   };
 
   const handleAddJob = (newJob: Job) => {
@@ -494,7 +578,12 @@ export default function BoardPage() {
       )}
 
       <AddJobModal open={addJobOpen} onClose={() => setAddJobOpen(false)} onAddJob={handleAddJob} />
-      <JobDetailModal job={selectedJob} onClose={() => setSelectedJob(null)} />
+      <JobDetailModal
+        job={selectedJob}
+        onClose={() => setSelectedJob(null)}
+        onStatusChange={handleStatusChange}
+        onDeleteJob={handleDeleteJob}
+      />
     </>
   );
 }
