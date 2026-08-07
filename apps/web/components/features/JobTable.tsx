@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import type { Job, JobStatus } from '@landed/shared-types';
 import { Badge } from '@/components/ui/Badge';
 import { Button } from '@/components/ui/Button';
@@ -8,13 +8,10 @@ import { Input } from '@/components/ui/Input';
 import {
   Search,
   ExternalLink,
-  MapPin,
-  DollarSign,
-  Plus,
   Trash2,
   ChevronDown,
-  Clock,
-  Briefcase,
+  ChevronLeft,
+  ChevronRight,
 } from 'lucide-react';
 
 interface JobTableProps {
@@ -32,6 +29,8 @@ const STATUS_OPTIONS: { value: JobStatus; label: string }[] = [
   { value: 'offer', label: 'Offer' },
   { value: 'rejected', label: 'Rejected' },
 ];
+
+const PAGE_SIZE_OPTIONS = [10, 15, 25, 50];
 
 function formatDate(iso: string): string {
   if (!iso) return '—';
@@ -59,6 +58,13 @@ export function JobTable({
 }: JobTableProps) {
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState<string>('all');
+  const [currentPage, setCurrentPage] = useState(1);
+  const [pageSize, setPageSize] = useState(15);
+
+  // Reset to page 1 whenever filters change
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [search, statusFilter, pageSize]);
 
   const filteredJobs = jobs.filter((job) => {
     const matchesSearch =
@@ -71,6 +77,12 @@ export function JobTable({
 
     return matchesSearch && matchesStatus;
   });
+
+  const totalPages = Math.ceil(filteredJobs.length / pageSize) || 1;
+  const safePage = Math.min(Math.max(currentPage, 1), totalPages);
+  const startIndex = (safePage - 1) * pageSize;
+  const endIndex = Math.min(startIndex + pageSize, filteredJobs.length);
+  const paginatedJobs = filteredJobs.slice(startIndex, endIndex);
 
   return (
     <div className="flex flex-col h-full bg-bg">
@@ -107,7 +119,9 @@ export function JobTable({
 
         <div className="flex items-center gap-2 shrink-0">
           <span className="text-xs font-mono text-ink-muted">
-            Showing {filteredJobs.length} of {jobs.length} jobs
+            {filteredJobs.length > 0
+              ? `Showing ${startIndex + 1}–${endIndex} of ${filteredJobs.length} jobs`
+              : '0 jobs'}
           </span>
         </div>
       </div>
@@ -128,14 +142,14 @@ export function JobTable({
             </tr>
           </thead>
           <tbody className="divide-y divide-line text-sm">
-            {filteredJobs.length === 0 ? (
+            {paginatedJobs.length === 0 ? (
               <tr>
                 <td colSpan={8} className="py-12 text-center text-ink-muted font-mono text-xs">
                   No applications found matching your criteria.
                 </td>
               </tr>
             ) : (
-              filteredJobs.map((job) => (
+              paginatedJobs.map((job) => (
                 <tr
                   key={job.id}
                   onClick={() => onJobClick?.(job)}
@@ -249,6 +263,79 @@ export function JobTable({
             )}
           </tbody>
         </table>
+      </div>
+
+      {/* Pagination Footer — grouped on the left with clean spacing */}
+      <div className="p-3 border-t border-line bg-bg flex flex-wrap items-center justify-start gap-6 text-xs font-mono">
+        {/* Rows per page selector */}
+        <div className="flex items-center gap-2 text-ink-muted">
+          <span>Show</span>
+          <div className="relative">
+            <select
+              value={pageSize}
+              aria-label="Rows per page"
+              onChange={(e) => setPageSize(Number(e.target.value))}
+              className="h-7 px-2 pr-6 bg-bg text-ink text-xs font-mono border border-line rounded-md focus:outline-none focus:border-ink/50 cursor-pointer appearance-none"
+            >
+              {PAGE_SIZE_OPTIONS.map((size) => (
+                <option key={size} value={size}>
+                  {size}
+                </option>
+              ))}
+            </select>
+            <ChevronDown size={12} className="absolute right-1.5 top-2 text-ink-muted pointer-events-none" />
+          </div>
+          <span>per page</span>
+        </div>
+
+        {/* Subtle vertical divider */}
+        <div className="h-4 w-px bg-line hidden sm:block" />
+
+        {/* Page controls */}
+        <div className="flex items-center gap-4">
+          <span className="text-ink-muted">
+            Page <strong className="text-ink font-semibold">{safePage}</strong> of{' '}
+            <strong className="text-ink font-semibold">{totalPages}</strong>
+          </span>
+
+          <div className="flex items-center gap-1">
+            <button
+              onClick={() => setCurrentPage((p) => Math.max(p - 1, 1))}
+              disabled={safePage === 1}
+              className="p-1.5 border border-line rounded-md text-ink disabled:opacity-40 disabled:cursor-not-allowed hover:bg-ink/5 transition-colors"
+              title="Previous page"
+              aria-label="Previous page"
+            >
+              <ChevronLeft size={14} />
+            </button>
+
+            {/* Page number buttons */}
+            {Array.from({ length: totalPages }, (_, i) => i + 1).map((pageNum) => (
+              <button
+                key={pageNum}
+                onClick={() => setCurrentPage(pageNum)}
+                className={[
+                  'w-7 h-7 flex items-center justify-center rounded-md font-mono text-xs transition-colors',
+                  pageNum === safePage
+                    ? 'bg-ink text-bg font-semibold'
+                    : 'text-ink-muted hover:text-ink hover:bg-ink/5 border border-line/60',
+                ].join(' ')}
+              >
+                {pageNum}
+              </button>
+            ))}
+
+            <button
+              onClick={() => setCurrentPage((p) => Math.min(p + 1, totalPages))}
+              disabled={safePage === totalPages}
+              className="p-1.5 border border-line rounded-md text-ink disabled:opacity-40 disabled:cursor-not-allowed hover:bg-ink/5 transition-colors"
+              title="Next page"
+              aria-label="Next page"
+            >
+              <ChevronRight size={14} />
+            </button>
+          </div>
+        </div>
       </div>
     </div>
   );
