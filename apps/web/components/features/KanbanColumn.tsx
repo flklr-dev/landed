@@ -18,9 +18,9 @@ const columnAccents: Record<JobStatus, string> = {
 
 export function KanbanColumn({ id, label, jobs, onJobClick }: KanbanColumnProps) {
   return (
-    <div className="flex flex-col w-64 shrink-0">
-      {/* Column header */}
-      <div className="flex items-center gap-2 px-3 py-2.5 border-b border-line bg-bg sticky top-0 z-10">
+    <div className="flex flex-col w-64 shrink-0 min-h-full">
+      {/* Column header — sticky to the top of the board container as page scrolls */}
+      <div className="flex items-center gap-2 px-3 py-2.5 border-b border-line bg-bg sticky top-0 z-10 shadow-[0_1px_2px_rgba(0,0,0,0.03)]">
         <span className={['w-2 h-2 rounded-full shrink-0', columnAccents[id]].join(' ')} />
         <span className="text-xs font-mono font-medium uppercase tracking-wider text-ink">
           {label}
@@ -30,8 +30,8 @@ export function KanbanColumn({ id, label, jobs, onJobClick }: KanbanColumnProps)
         </span>
       </div>
 
-      {/* Cards */}
-      <div className="flex-1 flex flex-col gap-2 p-2 overflow-y-auto min-h-[200px]">
+      {/* Cards container — natural height, no internal scrollbar */}
+      <div className="flex-1 flex flex-col gap-2 p-2 min-h-[200px]">
         {jobs.length === 0 ? (
           <div className="flex-1 flex items-center justify-center min-h-[120px] border border-dashed border-line rounded-none">
             <p className="text-xs text-ink-muted/60 font-mono text-center">No jobs yet</p>

@@ -468,8 +468,8 @@ export default function BoardPage() {
 
       {/* Main View Area */}
       {viewMode === 'kanban' ? (
-        <div className="flex-1 overflow-x-auto overflow-y-hidden">
-          <div className="flex h-full gap-0 divide-x divide-line min-w-max">
+        <div className="flex-1 overflow-auto">
+          <div className="flex min-h-full gap-0 divide-x divide-line min-w-max items-start">
             {KANBAN_COLUMNS.map(({ id, label }) => (
               <KanbanColumn
                 key={id}
