@@ -4,21 +4,22 @@ import React, { useState } from 'react';
 import type { Metadata } from 'next';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { Target, ArrowRight, Loader2, AlertCircle, ShieldAlert } from 'lucide-react';
+import { Target, ArrowRight, Loader2, AlertCircle } from 'lucide-react';
 import { Input } from '@/components/ui/Input';
 import { Button } from '@/components/ui/Button';
 import { useAuth } from '@/lib/auth-context';
+import { useToast } from '@/lib/toast-context';
 
 export default function LoginPage() {
   const router = useRouter();
   const { login } = useAuth();
+  const toast = useToast();
 
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
 
   const [errors, setErrors] = useState<{ email?: string; password?: string }>({});
   const [serverError, setServerError] = useState<string | null>(null);
-  const [isLockedOut, setIsLockedOut] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   const validateForm = (): boolean => {
@@ -50,15 +51,12 @@ export default function LoginPage() {
 
     try {
       await login(email.trim().toLowerCase(), password);
+      toast.success('Welcome back!');
       router.push('/board');
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : 'Invalid email or password';
       setServerError(msg);
-
-      // Check if locked out (rate limit 429 triggered after 3 failed attempts)
-      if (msg.toLowerCase().includes('too many') || msg.toLowerCase().includes('locked')) {
-        setIsLockedOut(true);
-      }
+      toast.error('Login failed', msg);
     } finally {
       setIsSubmitting(false);
     }
@@ -92,41 +90,31 @@ export default function LoginPage() {
             </p>
           </div>
 
-          {/* Rate Limit / Security Lockout Banner */}
-          {isLockedOut ? (
-            <div className="flex items-start gap-2.5 p-3.5 rounded-md bg-signal-rejected/15 border border-signal-rejected/30 text-xs text-signal-rejected">
-              <ShieldAlert size={16} className="shrink-0 mt-0.5" />
-              <div className="flex-1 leading-relaxed">
-                <span className="font-semibold block mb-0.5">Account Temporarily Locked</span>
-                Too many failed login attempts (max 3). For your security, login is locked for 15 minutes.
-              </div>
-            </div>
-          ) : serverError ? (
+          {/* Alert Banner for Server Error / Rate Limit */}
+          {serverError && (
             <div className="flex items-start gap-2.5 p-3 rounded-md bg-signal-rejected/10 border border-signal-rejected/20 text-xs text-signal-rejected">
               <AlertCircle size={15} className="shrink-0 mt-0.5" />
               <div className="flex-1 leading-relaxed">{serverError}</div>
             </div>
-          ) : null}
+          )}
 
           {/* Form */}
           <form onSubmit={handleSubmit} className="space-y-4" noValidate>
-            <div>
-              <Input
-                label="Email"
-                type="email"
-                id="login-email"
-                placeholder="you@example.com"
-                value={email}
-                onChange={(e) => {
-                  setEmail(e.target.value);
-                  if (errors.email) setErrors((prev) => ({ ...prev, email: undefined }));
-                }}
-                disabled={isSubmitting || isLockedOut}
-                required
-                autoComplete="email"
-              />
-              {errors.email && <p className="text-xs text-signal-rejected mt-1 font-medium">{errors.email}</p>}
-            </div>
+            <Input
+              label="Email"
+              type="email"
+              id="login-email"
+              placeholder="you@example.com"
+              value={email}
+              error={errors.email}
+              onChange={(e) => {
+                setEmail(e.target.value);
+                if (errors.email) setErrors((prev) => ({ ...prev, email: undefined }));
+              }}
+              disabled={isSubmitting}
+              required
+              autoComplete="email"
+            />
 
             <div className="space-y-1.5">
               <Input
@@ -135,15 +123,15 @@ export default function LoginPage() {
                 id="login-password"
                 placeholder="••••••••"
                 value={password}
+                error={errors.password}
                 onChange={(e) => {
                   setPassword(e.target.value);
                   if (errors.password) setErrors((prev) => ({ ...prev, password: undefined }));
                 }}
-                disabled={isSubmitting || isLockedOut}
+                disabled={isSubmitting}
                 required
                 autoComplete="current-password"
               />
-              {errors.password && <p className="text-xs text-signal-rejected mt-1 font-medium">{errors.password}</p>}
 
               <div className="text-right">
                 <Link
@@ -155,7 +143,7 @@ export default function LoginPage() {
               </div>
             </div>
 
-            <Button fullWidth type="submit" disabled={isSubmitting || isLockedOut} className="mt-2">
+            <Button fullWidth type="submit" disabled={isSubmitting} className="mt-2">
               {isSubmitting ? (
                 <>
                   <Loader2 size={14} className="animate-spin" />
@@ -183,7 +171,7 @@ export default function LoginPage() {
             fullWidth
             type="button"
             className="gap-2"
-            disabled={isSubmitting || isLockedOut}
+            disabled={isSubmitting}
           >
             <svg className="w-4 h-4" viewBox="0 0 24 24" aria-hidden="true">
               <path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" fill="#4285F4"/>

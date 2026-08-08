@@ -1,7 +1,8 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import type { Metadata } from 'next';
+import { useSearchParams } from 'next/navigation';
 import { TopBar } from '@/components/features/TopBar';
 import { KanbanColumn } from '@/components/features/KanbanColumn';
 import { JobTable } from '@/components/features/JobTable';
@@ -9,6 +10,8 @@ import { Modal } from '@/components/ui/Modal';
 import { Input, Textarea } from '@/components/ui/Input';
 import { Button } from '@/components/ui/Button';
 import { Badge } from '@/components/ui/Badge';
+import { WelcomeModal } from '@/components/features/WelcomeModal';
+import { useAuth } from '@/lib/auth-context';
 import { KANBAN_COLUMNS, mockJobs as initialMockJobs } from '@/lib/mock-data';
 import type { Job, JobStatus } from '@landed/shared-types';
 import {
@@ -489,10 +492,20 @@ function JobDetailModal({
 // ── Board Page ─────────────────────────────────────────────────────────────────
 
 export default function BoardPage() {
+  const searchParams = useSearchParams();
+  const { user } = useAuth();
   const [jobs, setJobs] = useState<Job[]>(initialMockJobs);
   const [viewMode, setViewMode] = useState<'kanban' | 'table'>('kanban');
   const [addJobOpen, setAddJobOpen] = useState(false);
   const [selectedJob, setSelectedJob] = useState<Job | null>(null);
+  const [welcomeOpen, setWelcomeOpen] = useState(false);
+
+  useEffect(() => {
+    const isNew = searchParams.get('new') === 'true';
+    if (isNew) {
+      setWelcomeOpen(true);
+    }
+  }, [searchParams]);
 
   const handleStatusChange = (jobId: string, newStatus: JobStatus) => {
     setJobs((prev) =>
@@ -583,6 +596,12 @@ export default function BoardPage() {
         onClose={() => setSelectedJob(null)}
         onStatusChange={handleStatusChange}
         onDeleteJob={handleDeleteJob}
+      />
+      <WelcomeModal
+        userName={user?.name || 'there'}
+        isOpen={welcomeOpen}
+        onClose={() => setWelcomeOpen(false)}
+        onStartExtraction={() => setAddJobOpen(true)}
       />
     </>
   );

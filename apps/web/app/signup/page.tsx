@@ -8,10 +8,12 @@ import { Target, ArrowRight, Loader2, AlertCircle } from 'lucide-react';
 import { Input } from '@/components/ui/Input';
 import { Button } from '@/components/ui/Button';
 import { useAuth } from '@/lib/auth-context';
+import { useToast } from '@/lib/toast-context';
 
 export default function SignupPage() {
   const router = useRouter();
   const { register } = useAuth();
+  const toast = useToast();
 
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
@@ -59,10 +61,12 @@ export default function SignupPage() {
 
     try {
       await register(name.trim(), email.trim().toLowerCase(), password);
-      router.push('/board');
+      toast.success('Account created successfully!', `Welcome to Landed, ${name.trim()}!`);
+      router.push('/board?new=true');
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : 'Failed to create account';
       setServerError(msg);
+      toast.error('Sign up failed', msg);
     } finally {
       setIsSubmitting(false);
     }
@@ -106,60 +110,54 @@ export default function SignupPage() {
 
           {/* Form */}
           <form onSubmit={handleSubmit} className="space-y-4" noValidate>
-            <div>
-              <Input
-                label="Full Name"
-                type="text"
-                id="signup-name"
-                placeholder="Kit Adrian"
-                value={name}
-                onChange={(e) => {
-                  setName(e.target.value);
-                  if (errors.name) setErrors((prev) => ({ ...prev, name: undefined }));
-                }}
-                disabled={isSubmitting}
-                required
-                autoComplete="name"
-              />
-              {errors.name && <p className="text-xs text-signal-rejected mt-1 font-medium">{errors.name}</p>}
-            </div>
+            <Input
+              label="Full Name"
+              type="text"
+              id="signup-name"
+              placeholder="Kit Adrian"
+              value={name}
+              error={errors.name}
+              onChange={(e) => {
+                setName(e.target.value);
+                if (errors.name) setErrors((prev) => ({ ...prev, name: undefined }));
+              }}
+              disabled={isSubmitting}
+              required
+              autoComplete="name"
+            />
 
-            <div>
-              <Input
-                label="Email"
-                type="email"
-                id="signup-email"
-                placeholder="you@example.com"
-                value={email}
-                onChange={(e) => {
-                  setEmail(e.target.value);
-                  if (errors.email) setErrors((prev) => ({ ...prev, email: undefined }));
-                }}
-                disabled={isSubmitting}
-                required
-                autoComplete="email"
-              />
-              {errors.email && <p className="text-xs text-signal-rejected mt-1 font-medium">{errors.email}</p>}
-            </div>
+            <Input
+              label="Email"
+              type="email"
+              id="signup-email"
+              placeholder="you@example.com"
+              value={email}
+              error={errors.email}
+              onChange={(e) => {
+                setEmail(e.target.value);
+                if (errors.email) setErrors((prev) => ({ ...prev, email: undefined }));
+              }}
+              disabled={isSubmitting}
+              required
+              autoComplete="email"
+            />
 
-            <div>
-              <Input
-                label="Password"
-                type="password"
-                id="signup-password"
-                placeholder="Create a password"
-                value={password}
-                onChange={(e) => {
-                  setPassword(e.target.value);
-                  if (errors.password) setErrors((prev) => ({ ...prev, password: undefined }));
-                }}
-                disabled={isSubmitting}
-                required
-                autoComplete="new-password"
-                hint="Must be at least 8 characters."
-              />
-              {errors.password && <p className="text-xs text-signal-rejected mt-1 font-medium">{errors.password}</p>}
-            </div>
+            <Input
+              label="Password"
+              type="password"
+              id="signup-password"
+              placeholder="Create a password"
+              value={password}
+              error={errors.password}
+              onChange={(e) => {
+                setPassword(e.target.value);
+                if (errors.password) setErrors((prev) => ({ ...prev, password: undefined }));
+              }}
+              disabled={isSubmitting}
+              required
+              autoComplete="new-password"
+              hint="Must be at least 8 characters."
+            />
 
             <Button fullWidth type="submit" disabled={isSubmitting} className="mt-2">
               {isSubmitting ? (

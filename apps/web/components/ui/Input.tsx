@@ -51,7 +51,7 @@ export function Input({
           id={inputId}
           className={[
             baseInputClass,
-            error ? 'border-red-400 focus:border-red-400 focus:ring-red-100' : '',
+            error ? 'border-red-500 text-ink focus:border-red-500 focus:ring-2 focus:ring-red-500/20' : '',
             prefix ? 'pl-9' : '',
             suffix ? 'pr-9' : '',
             className,
@@ -64,7 +64,7 @@ export function Input({
           <span className="absolute right-3 text-ink-muted flex items-center">{suffix}</span>
         )}
       </div>
-      {error && <p className="text-xs text-red-600">{error}</p>}
+      {error && <p className="text-xs text-red-500 font-medium">{error}</p>}
       {hint && !error && <p className="text-xs text-ink-muted">{hint}</p>}
     </div>
   );
@@ -85,14 +85,14 @@ export function Textarea({ label, error, hint, id, className = '', ...props }: T
         className={[
           baseInputClass,
           'resize-y min-h-[80px]',
-          error ? 'border-red-400 focus:border-red-400 focus:ring-red-100' : '',
+          error ? 'border-red-500 text-ink focus:border-red-500 focus:ring-2 focus:ring-red-500/20' : '',
           className,
         ]
           .filter(Boolean)
           .join(' ')}
         {...props}
       />
-      {error && <p className="text-xs text-red-600">{error}</p>}
+      {error && <p className="text-xs text-red-500 font-medium">{error}</p>}
       {hint && !error && <p className="text-xs text-ink-muted">{hint}</p>}
     </div>
   );

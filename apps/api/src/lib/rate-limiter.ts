@@ -146,7 +146,7 @@ export const loginRateLimiter = createRateLimiter({
   prefix: 'login',
   max: 3,
   windowMs: 15 * 60 * 1000, // 15 minutes
-  message: 'Too many failed login attempts. Account temporarily locked for 15 minutes for your security.',
+  message: 'Too many login attempts. Try again after 15 mins',
   keyGenerator: (req) => {
     // Key by IP + lowercased email if present to protect specific accounts
     const ip = getClientIp(req);
