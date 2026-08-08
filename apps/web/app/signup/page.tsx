@@ -1,12 +1,73 @@
+'use client';
+
+import React, { useState } from 'react';
 import type { Metadata } from 'next';
 import Link from 'next/link';
-import { Target, ArrowRight } from 'lucide-react';
+import { useRouter } from 'next/navigation';
+import { Target, ArrowRight, Loader2, AlertCircle } from 'lucide-react';
 import { Input } from '@/components/ui/Input';
 import { Button } from '@/components/ui/Button';
-
-export const metadata: Metadata = { title: 'Sign up' };
+import { useAuth } from '@/lib/auth-context';
 
 export default function SignupPage() {
+  const router = useRouter();
+  const { register } = useAuth();
+
+  const [name, setName] = useState('');
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+
+  const [errors, setErrors] = useState<{ name?: string; email?: string; password?: string }>({});
+  const [serverError, setServerError] = useState<string | null>(null);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+
+  const validateForm = (): boolean => {
+    const newErrors: { name?: string; email?: string; password?: string } = {};
+
+    const trimmedName = name.trim();
+    if (!trimmedName) {
+      newErrors.name = 'Full name is required';
+    } else if (trimmedName.length < 2) {
+      newErrors.name = 'Name must be at least 2 characters';
+    }
+
+    const trimmedEmail = email.trim().toLowerCase();
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!trimmedEmail) {
+      newErrors.email = 'Email address is required';
+    } else if (!emailRegex.test(trimmedEmail)) {
+      newErrors.email = 'Please enter a valid email address';
+    }
+
+    if (!password) {
+      newErrors.password = 'Password is required';
+    } else if (password.length < 8) {
+      newErrors.password = 'Password must be at least 8 characters long';
+    }
+
+    setErrors(newErrors);
+    return Object.keys(newErrors).length === 0;
+  };
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setServerError(null);
+
+    if (!validateForm()) return;
+
+    setIsSubmitting(true);
+
+    try {
+      await register(name.trim(), email.trim().toLowerCase(), password);
+      router.push('/board');
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : 'Failed to create account';
+      setServerError(msg);
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
   return (
     <div className="min-h-screen bg-bg flex flex-col">
       {/* Mini nav */}
@@ -35,40 +96,84 @@ export default function SignupPage() {
             </p>
           </div>
 
-          {/* Form */}
-          <form className="space-y-4">
-            <Input
-              label="Full Name"
-              type="text"
-              id="signup-name"
-              placeholder="Kit Adrian"
-              required
-              autoComplete="name"
-            />
-            <Input
-              label="Email"
-              type="email"
-              id="signup-email"
-              placeholder="you@example.com"
-              required
-              autoComplete="email"
-            />
-            <Input
-              label="Password"
-              type="password"
-              id="signup-password"
-              placeholder="Create a password"
-              required
-              autoComplete="new-password"
-              hint="Must be at least 8 characters."
-            />
+          {/* Alert Banner for Server Error / Lockout */}
+          {serverError && (
+            <div className="flex items-start gap-2.5 p-3 rounded-md bg-signal-rejected/10 border border-signal-rejected/20 text-xs text-signal-rejected">
+              <AlertCircle size={15} className="shrink-0 mt-0.5" />
+              <div className="flex-1 leading-relaxed">{serverError}</div>
+            </div>
+          )}
 
-            <Link href="/board">
-              <Button fullWidth type="button" className="mt-2">
-                Create Account
-                <ArrowRight size={14} />
-              </Button>
-            </Link>
+          {/* Form */}
+          <form onSubmit={handleSubmit} className="space-y-4" noValidate>
+            <div>
+              <Input
+                label="Full Name"
+                type="text"
+                id="signup-name"
+                placeholder="Kit Adrian"
+                value={name}
+                onChange={(e) => {
+                  setName(e.target.value);
+                  if (errors.name) setErrors((prev) => ({ ...prev, name: undefined }));
+                }}
+                disabled={isSubmitting}
+                required
+                autoComplete="name"
+              />
+              {errors.name && <p className="text-xs text-signal-rejected mt-1 font-medium">{errors.name}</p>}
+            </div>
+
+            <div>
+              <Input
+                label="Email"
+                type="email"
+                id="signup-email"
+                placeholder="you@example.com"
+                value={email}
+                onChange={(e) => {
+                  setEmail(e.target.value);
+                  if (errors.email) setErrors((prev) => ({ ...prev, email: undefined }));
+                }}
+                disabled={isSubmitting}
+                required
+                autoComplete="email"
+              />
+              {errors.email && <p className="text-xs text-signal-rejected mt-1 font-medium">{errors.email}</p>}
+            </div>
+
+            <div>
+              <Input
+                label="Password"
+                type="password"
+                id="signup-password"
+                placeholder="Create a password"
+                value={password}
+                onChange={(e) => {
+                  setPassword(e.target.value);
+                  if (errors.password) setErrors((prev) => ({ ...prev, password: undefined }));
+                }}
+                disabled={isSubmitting}
+                required
+                autoComplete="new-password"
+                hint="Must be at least 8 characters."
+              />
+              {errors.password && <p className="text-xs text-signal-rejected mt-1 font-medium">{errors.password}</p>}
+            </div>
+
+            <Button fullWidth type="submit" disabled={isSubmitting} className="mt-2">
+              {isSubmitting ? (
+                <>
+                  <Loader2 size={14} className="animate-spin" />
+                  Creating Account...
+                </>
+              ) : (
+                <>
+                  Create Account
+                  <ArrowRight size={14} />
+                </>
+              )}
+            </Button>
           </form>
 
           {/* Divider */}
@@ -79,7 +184,7 @@ export default function SignupPage() {
           </div>
 
           {/* OAuth */}
-          <Button variant="secondary" fullWidth type="button" className="gap-2">
+          <Button variant="secondary" fullWidth type="button" className="gap-2" disabled={isSubmitting}>
             <svg className="w-4 h-4" viewBox="0 0 24 24" aria-hidden="true">
               <path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" fill="#4285F4"/>
               <path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853"/>

@@ -1,0 +1,120 @@
+// ─────────────────────────────────────────────────────────────────────────────
+// Landed — Prisma Schema
+// Maps to ARCHITECTURE.md Section 4 (Database schema)
+// Uses pgvector for embedding storage & cosine similarity search
+// ─────────────────────────────────────────────────────────────────────────────
+
+generator client {
+  provider        = "prisma-client-js"
+  previewFeatures = ["postgresqlExtensions"]
+}
+
+datasource db {
+  provider   = "postgresql"
+  url        = env("DATABASE_URL")
+  extensions = [pgvector(map: "vector", schema: "public"), pg_trgm]
+}
+
+// ── Users ────────────────────────────────────────────────────────────────────
+
+model User {
+  id           String   @id @default(cuid())
+  email        String   @unique
+  name         String
+  passwordHash String   @map("password_hash")
+  plan         String   @default("free") // "free" | "premium"
+  createdAt    DateTime @default(now()) @map("created_at")
+  updatedAt    DateTime @updatedAt @map("updated_at")
+
+  jobs    Job[]
+  resumes Resume[]
+  matches MatchScore[]
+
+  @@map("users")
+}
+
+// ── Jobs (tracked applications) ──────────────────────────────────────────────
+
+model Job {
+  id     String @id @default(cuid())
+  userId String @map("user_id")
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  // Source
+  sourceUrl        String? @map("source_url")
+  extractionStatus String  @default("idle") @map("extraction_status") // idle | pending | done | failed
+
+  // Extracted / manually entered fields
+  company         String
+  title           String
+  location        String?
+  salaryRaw       String?  @map("salary_raw")
+  remoteType      String?  @map("remote_type") // remote | hybrid | onsite
+  jobType         String?  @map("job_type") // full-time | part-time | contract | freelance | internship
+  experienceLevel String?  @map("experience_level")
+  requiredSkills  String[] @map("required_skills")
+  description     String?  @db.Text
+
+  // Application state
+  status    String  @default("saved") // saved | applied | interview | offer | rejected
+  notes     String? @db.Text
+  appliedAt DateTime? @map("applied_at")
+
+  // Embedding vector (384-dim for all-MiniLM-L6-v2)
+  // Stored as raw SQL via migration since Prisma doesn't natively support vector columns
+  // Access via raw queries: SELECT embedding <=> $1 FROM jobs
+
+  // Timestamps
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  matches MatchScore[]
+
+  @@index([userId])
+  @@index([userId, status])
+  @@map("jobs")
+}
+
+// ── Resumes ──────────────────────────────────────────────────────────────────
+
+model Resume {
+  id     String @id @default(cuid())
+  userId String @map("user_id")
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  fileName         String  @map("file_name")
+  fileUrl          String? @map("file_url") // S3 URL or local path
+  parsedSkills     String[] @map("parsed_skills")
+  parsedRoles      String[] @map("parsed_roles")
+  yearsOfExperience Int?   @map("years_of_experience")
+  extractionStatus String  @default("idle") @map("extraction_status")
+
+  // Embedding vector — same dimension as job embeddings for cosine similarity
+  // Added via raw SQL migration
+
+  uploadedAt DateTime @default(now()) @map("uploaded_at")
+  updatedAt  DateTime @updatedAt @map("updated_at")
+
+  @@index([userId])
+  @@map("resumes")
+}
+
+// ── Match Scores ─────────────────────────────────────────────────────────────
+
+model MatchScore {
+  id     String @id @default(cuid())
+  userId String @map("user_id")
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  jobId  String @map("job_id")
+  job    Job    @relation(fields: [jobId], references: [id], onDelete: Cascade)
+
+  score          Float // 0–100
+  explanation    String? @db.Text // AI-generated, on-demand (premium)
+  matchedSkills  String[] @map("matched_skills")
+  missingSkills  String[] @map("missing_skills")
+  computedAt     DateTime @default(now()) @map("computed_at")
+
+  @@unique([userId, jobId])
+  @@index([userId])
+  @@map("match_scores")
+}

@@ -2,11 +2,26 @@
   "name": "@landed/worker",
   "version": "0.0.1",
   "private": true,
-  "description": "AI pipeline worker — SQS consumer, LLM extraction, embeddings. Phase 2.",
+  "description": "AI pipeline worker — BullMQ consumer, Grok 4.1 extraction, local embeddings.",
   "scripts": {
-    "dev": "echo 'Worker not yet implemented'",
-    "build": "echo 'Worker not yet implemented'",
-    "lint": "echo 'skip'",
-    "typecheck": "echo 'skip'"
+    "dev": "tsx watch src/worker.ts",
+    "build": "tsc",
+    "start": "node dist/worker.js",
+    "typecheck": "tsc --noEmit",
+    "lint": "echo 'skip'"
+  },
+  "dependencies": {
+    "@landed/db": "workspace:*",
+    "@landed/shared-types": "workspace:*",
+    "bullmq": "^5.52.0",
+    "ioredis": "^5.6.0",
+    "zod": "^3.25.0",
+    "dotenv": "^16.5.0",
+    "cheerio": "^1.0.0",
+    "@xenova/transformers": "^2.17.0"
+  },
+  "devDependencies": {
+    "tsx": "^4.19.0",
+    "typescript": "^5.8.3"
   }
 }
