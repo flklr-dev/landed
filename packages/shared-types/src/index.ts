@@ -26,6 +26,7 @@ export interface User {
   plan: UserPlan;
   createdAt: string; // ISO 8601
   avatarUrl?: string;
+  authProvider?: 'local' | 'google' | 'both';
 }
 
 export interface Job {

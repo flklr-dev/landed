@@ -93,6 +93,15 @@ export async function register(name: string, email: string, password: string): P
   return result;
 }
 
+export async function googleAuth(credential: string): Promise<{ user: User; token: string; isNew: boolean }> {
+  const result = await request<{ user: User; token: string; isNew: boolean }>('/auth/google', {
+    method: 'POST',
+    body: JSON.stringify({ credential }),
+  });
+  setToken(result.token);
+  return result;
+}
+
 export async function getMe(): Promise<{ user: User }> {
   return request<{ user: User }>('/auth/me');
 }

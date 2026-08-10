@@ -109,9 +109,18 @@ export function Sidebar() {
         {/* User area */}
         <div className="border-t border-line p-3">
           <div className="flex items-center gap-2.5 px-2 py-2">
-            <div className="w-7 h-7 rounded-full bg-ink/10 flex items-center justify-center shrink-0">
-              <span className="text-xs font-semibold text-ink">{initials}</span>
-            </div>
+            {user?.avatarUrl ? (
+              <img
+                src={user.avatarUrl}
+                alt={userName}
+                className="w-7 h-7 rounded-full shrink-0 object-cover"
+                referrerPolicy="no-referrer"
+              />
+            ) : (
+              <div className="w-7 h-7 rounded-full bg-ink/10 flex items-center justify-center shrink-0">
+                <span className="text-xs font-semibold text-ink">{initials}</span>
+              </div>
+            )}
             <div className="flex-1 min-w-0">
               <p className="text-xs font-medium text-ink truncate">{userName}</p>
               <p className="text-[10px] font-mono uppercase tracking-wider text-ink-muted">

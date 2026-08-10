@@ -11,8 +11,17 @@ import { Input, Textarea } from '@/components/ui/Input';
 import { Button } from '@/components/ui/Button';
 import { Badge } from '@/components/ui/Badge';
 import { WelcomeModal } from '@/components/features/WelcomeModal';
+import { EmptyBoardState } from '@/components/features/EmptyBoardState';
 import { useAuth } from '@/lib/auth-context';
-import { KANBAN_COLUMNS, mockJobs as initialMockJobs } from '@/lib/mock-data';
+import { useToast } from '@/lib/toast-context';
+import {
+  fetchJobs,
+  createJob,
+  extractJobFromUrl,
+  updateJob,
+  deleteJob,
+} from '@/lib/api-client';
+import { KANBAN_COLUMNS } from '@/lib/mock-data';
 import type { Job, JobStatus } from '@landed/shared-types';
 import {
   Link2,
@@ -30,6 +39,7 @@ import {
   CheckCircle2,
   Trash2,
   Table as TableIcon,
+  Loader2,
 } from 'lucide-react';
 
 // ── Add Job Modal ─────────────────────────────────────────────────────────────
@@ -59,41 +69,26 @@ function AddJobModal({
   const [skillsInput, setSkillsInput] = useState<string>('');
   const [notes, setNotes] = useState('');
 
-  const handleExtract = () => {
+  const toast = useToast();
+
+  const handleExtract = async () => {
     if (!url) return;
     setIsExtracting(true);
-    setTimeout(() => {
-      setIsExtracting(false);
-      const domainMatch = url.match(/https?:\/\/(?:www\.)?([^/]+)/);
-      const extractedCompany = domainMatch
-        ? domainMatch[1].split('.')[0].toUpperCase()
-        : 'Tech Company';
-
-      const newJob: Job = {
-        id: `job-${Date.now()}`,
-        userId: 'user-1',
-        sourceUrl: url,
-        extractionStatus: 'done',
-        company: extractedCompany,
-        title: 'Software Engineer',
-        location: 'Remote',
-        salaryRaw: '$120k–160k',
-        remoteType: 'remote',
-        jobType: 'full-time',
-        experienceLevel: 'Senior',
-        requiredSkills: ['TypeScript', 'React', 'Node.js'],
-        status: 'saved',
-        createdAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString(),
-      };
-
-      onAddJob(newJob);
+    try {
+      const res = await extractJobFromUrl(url);
+      onAddJob(res.job);
+      toast.success('Extraction queued!', 'Extracting job details with AI...');
       setUrl('');
       onClose();
-    }, 1500);
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : 'Extraction failed';
+      toast.error('Extraction failed', msg);
+    } finally {
+      setIsExtracting(false);
+    }
   };
 
-  const handleManualSubmit = (e: React.FormEvent) => {
+  const handleManualSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!company || !title) return;
 
@@ -101,43 +96,40 @@ function AddJobModal({
       ? skillsInput.split(',').map((s) => s.trim()).filter(Boolean)
       : ['TypeScript', 'React'];
 
-    // Format salary cleanly without duplicating currency symbols
     let formattedSalary: string | undefined = undefined;
     if (salary.trim()) {
-      let cleaned = salary.trim();
-      // Remove any leading currency symbols if user typed them manually
-      cleaned = cleaned.replace(/^[\$₱€£¥A-Za-z]+\s*/, '');
+      let cleaned = salary.trim().replace(/^[\$₱€£¥A-Za-z]+\s*/, '');
       formattedSalary = `${currency}${cleaned}`;
     }
 
-    const newJob: Job = {
-      id: `job-${Date.now()}`,
-      userId: 'user-1',
-      sourceUrl: url || undefined,
-      extractionStatus: 'idle',
-      company,
-      title,
-      location: location || 'Remote',
-      salaryRaw: formattedSalary,
-      remoteType: 'remote',
-      jobType: jobType || 'full-time',
-      experienceLevel: experienceLevel || 'Senior',
-      requiredSkills: parsedSkills,
-      status: status || 'saved',
-      appliedAt: status === 'applied' || status === 'interview' || status === 'offer' || status === 'rejected' ? new Date().toISOString() : undefined,
-      notes: notes || undefined,
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString(),
-    };
+    try {
+      const res = await createJob({
+        company,
+        title,
+        location: location || 'Remote',
+        salaryRaw: formattedSalary,
+        remoteType: 'remote',
+        jobType: jobType || 'full-time',
+        experienceLevel: experienceLevel || 'Senior',
+        requiredSkills: parsedSkills,
+        status: status || 'saved',
+        notes: notes || undefined,
+        sourceUrl: url || undefined,
+      });
 
-    onAddJob(newJob);
-    setCompany('');
-    setTitle('');
-    setLocation('');
-    setSalary('');
-    setSkillsInput('');
-    setNotes('');
-    onClose();
+      onAddJob(res.job);
+      toast.success('Job application created!');
+      setCompany('');
+      setTitle('');
+      setLocation('');
+      setSalary('');
+      setSkillsInput('');
+      setNotes('');
+      onClose();
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : 'Failed to create job';
+      toast.error('Failed to create job', msg);
+    }
   };
 
   return (
@@ -494,11 +486,30 @@ function JobDetailModal({
 export default function BoardPage() {
   const searchParams = useSearchParams();
   const { user } = useAuth();
-  const [jobs, setJobs] = useState<Job[]>(initialMockJobs);
+  const toast = useToast();
+
+  const [jobs, setJobs] = useState<Job[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
   const [viewMode, setViewMode] = useState<'kanban' | 'table'>('kanban');
   const [addJobOpen, setAddJobOpen] = useState(false);
   const [selectedJob, setSelectedJob] = useState<Job | null>(null);
   const [welcomeOpen, setWelcomeOpen] = useState(false);
+
+  useEffect(() => {
+    async function loadJobs() {
+      setIsLoading(true);
+      try {
+        const res = await fetchJobs();
+        setJobs(res.jobs || []);
+      } catch (err) {
+        console.warn('[Board] API load failed — user may be unauthenticated or API starting up:', err);
+        setJobs([]);
+      } finally {
+        setIsLoading(false);
+      }
+    }
+    loadJobs();
+  }, []);
 
   useEffect(() => {
     const isNew = searchParams.get('new') === 'true';
@@ -507,17 +518,32 @@ export default function BoardPage() {
     }
   }, [searchParams]);
 
-  const handleStatusChange = (jobId: string, newStatus: JobStatus) => {
+  const handleStatusChange = async (jobId: string, newStatus: JobStatus) => {
+    // Optimistic UI update
     setJobs((prev) =>
       prev.map((j) => (j.id === jobId ? { ...j, status: newStatus, updatedAt: new Date().toISOString() } : j))
     );
-    // Keep selectedJob state updated if open
     setSelectedJob((prev) => (prev && prev.id === jobId ? { ...prev, status: newStatus } : prev));
+
+    try {
+      await updateJob(jobId, { status: newStatus });
+    } catch (err) {
+      console.error('Failed to update job status on server:', err);
+      toast.error('Failed to update job status');
+    }
   };
 
-  const handleDeleteJob = (jobId: string) => {
+  const handleDeleteJob = async (jobId: string) => {
     setJobs((prev) => prev.filter((j) => j.id !== jobId));
     setSelectedJob(null);
+
+    try {
+      await deleteJob(jobId);
+      toast.success('Job deleted');
+    } catch (err) {
+      console.error('Failed to delete job on server:', err);
+      toast.error('Failed to delete job');
+    }
   };
 
   const handleAddJob = (newJob: Job) => {
@@ -563,8 +589,17 @@ export default function BoardPage() {
         onAddJob={() => setAddJobOpen(true)}
       />
 
-      {/* Main View Area */}
-      {viewMode === 'kanban' ? (
+      {/* Main Content Area */}
+      {isLoading ? (
+        <div className="flex-1 flex items-center justify-center p-8 text-ink-muted">
+          <Loader2 className="animate-spin text-ink shrink-0" size={24} />
+        </div>
+      ) : jobs.length === 0 ? (
+        <EmptyBoardState
+          onAddJobUrl={() => setAddJobOpen(true)}
+          onAddJobManual={() => setAddJobOpen(true)}
+        />
+      ) : viewMode === 'kanban' ? (
         <div className="flex-1 overflow-auto">
           <div className="flex min-h-full gap-0 divide-x divide-line min-w-max items-start">
             {KANBAN_COLUMNS.map(({ id, label }) => (

@@ -3,17 +3,26 @@
 // ─────────────────────────────────────────────────────────────────────────────
 // Landed — Auth Context Provider
 // Manages global user authentication state, token storage, and session checks.
+// Supports email/password and Google OAuth flows.
 // ─────────────────────────────────────────────────────────────────────────────
 
 import React, { createContext, useContext, useEffect, useState } from 'react';
 import type { User } from '@landed/shared-types';
-import { getMe, login as apiLogin, register as apiRegister, clearToken, getToken } from './api-client';
+import {
+  getMe,
+  login as apiLogin,
+  register as apiRegister,
+  googleAuth as apiGoogleAuth,
+  clearToken,
+  getToken,
+} from './api-client';
 
 interface AuthContextType {
   user: User | null;
   loading: boolean;
   login: typeof apiLogin;
   register: typeof apiRegister;
+  loginWithGoogle: (credential: string) => Promise<{ user: User; token: string; isNew: boolean }>;
   logout: () => void;
   refetchUser: () => Promise<void>;
 }
@@ -59,6 +68,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     return res;
   };
 
+  const handleGoogleLogin = async (credential: string) => {
+    const res = await apiGoogleAuth(credential);
+    setUser(res.user);
+    return res;
+  };
+
   const logout = () => {
     clearToken();
     setUser(null);
@@ -72,6 +87,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         loading,
         login: handleLogin,
         register: handleRegister,
+        loginWithGoogle: handleGoogleLogin,
         logout,
         refetchUser: fetchSession,
       }}

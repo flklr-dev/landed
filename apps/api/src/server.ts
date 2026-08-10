@@ -3,10 +3,17 @@
 // Stateless request/response layer. All AI work is enqueued to BullMQ.
 // ─────────────────────────────────────────────────────────────────────────────
 
-import 'dotenv/config';
+import dotenv from 'dotenv';
+import path from 'path';
 import express from 'express';
 import cors from 'cors';
 import helmet from 'helmet';
+
+// Load environment variables from app dir, root .env, and root .env.local
+dotenv.config();
+dotenv.config({ path: path.resolve(process.cwd(), '../../.env') });
+dotenv.config({ path: path.resolve(process.cwd(), '../../.env.local') });
+
 import { authRouter } from './routes/auth.js';
 import { jobsRouter } from './routes/jobs.js';
 import { matchesRouter } from './routes/matches.js';
@@ -18,7 +25,12 @@ const PORT = Number(process.env.API_PORT) || 4000;
 
 // ── Global middleware ────────────────────────────────────────────────────────
 
-app.use(helmet());
+// Allow Google OAuth popups to communicate via postMessage
+app.use(
+  helmet({
+    crossOriginOpenerPolicy: { policy: 'same-origin-allow-popups' },
+  })
+);
 app.use(cors({
   origin: process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000',
   credentials: true,
