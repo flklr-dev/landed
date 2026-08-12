@@ -17,6 +17,11 @@ const REDIS_URL = process.env.REDIS_URL || 'redis://localhost:6379';
 
 const connection = new IORedis(REDIS_URL, {
   maxRetriesPerRequest: null,
+  enableOfflineQueue: false,
+});
+
+connection.on('error', (err) => {
+  console.warn('[Worker] Redis connection error:', err.message || err);
 });
 
 console.log('[Worker] Connecting to Redis:', REDIS_URL);

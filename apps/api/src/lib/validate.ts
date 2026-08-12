@@ -26,8 +26,14 @@ export function validate<T extends ZodSchema>(target: ValidationTarget, schema: 
       });
       return;
     }
-    // Replace the raw input with the parsed (and potentially transformed) value
-    (req as unknown as Record<string, unknown>)[target] = result.data;
+    // Safely apply parsed & transformed values to req without attempting to overwrite read-only getters
+    if (target === 'body') {
+      req.body = result.data;
+    } else if (target === 'query') {
+      Object.assign(req.query, result.data);
+    } else if (target === 'params') {
+      Object.assign(req.params, result.data);
+    }
     next();
   };
 }

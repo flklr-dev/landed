@@ -11,9 +11,12 @@ const redisUrl = process.env.REDIS_URL || 'redis://localhost:6379';
 
 let redis: IORedis | null = null;
 try {
-  redis = new IORedis(redisUrl, { maxRetriesPerRequest: 1, lazyConnect: true });
+  redis = new IORedis(redisUrl, { maxRetriesPerRequest: 1, lazyConnect: true, enableOfflineQueue: false });
+  redis.on('error', () => {
+    // Ignore ECONNREFUSED in development — rate limiter falls back to memoryStore automatically
+    redis = null;
+  });
   redis.connect().catch(() => {
-    console.warn('[RateLimiter] Redis connection failed — falling back to in-memory store');
     redis = null;
   });
 } catch {

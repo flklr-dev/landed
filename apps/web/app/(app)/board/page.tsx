@@ -90,11 +90,17 @@ function AddJobModal({
 
   const handleManualSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!company || !title) return;
+    const trimmedCompany = company.trim();
+    const trimmedTitle = title.trim();
+
+    if (!trimmedCompany || !trimmedTitle) {
+      toast.error('Validation Error', 'Company name and Job title are required.');
+      return;
+    }
 
     const parsedSkills = skillsInput
       ? skillsInput.split(',').map((s) => s.trim()).filter(Boolean)
-      : ['TypeScript', 'React'];
+      : [];
 
     let formattedSalary: string | undefined = undefined;
     if (salary.trim()) {
@@ -104,21 +110,21 @@ function AddJobModal({
 
     try {
       const res = await createJob({
-        company,
-        title,
-        location: location || 'Remote',
+        company: trimmedCompany,
+        title: trimmedTitle,
+        location: location.trim() || 'Remote',
         salaryRaw: formattedSalary,
         remoteType: 'remote',
         jobType: jobType || 'full-time',
         experienceLevel: experienceLevel || 'Senior',
         requiredSkills: parsedSkills,
         status: status || 'saved',
-        notes: notes || undefined,
-        sourceUrl: url || undefined,
+        notes: notes.trim() || undefined,
+        sourceUrl: url.trim() || undefined,
       });
 
       onAddJob(res.job);
-      toast.success('Job application created!');
+      toast.success('Application created!', `${trimmedTitle} at ${trimmedCompany} has been saved.`);
       setCompany('');
       setTitle('');
       setLocation('');
@@ -127,8 +133,8 @@ function AddJobModal({
       setNotes('');
       onClose();
     } catch (err) {
-      const msg = err instanceof Error ? err.message : 'Failed to create job';
-      toast.error('Failed to create job', msg);
+      const msg = err instanceof Error ? err.message : 'Unable to save job application.';
+      toast.error('Could not save application', msg);
     }
   };
 
@@ -330,12 +336,52 @@ function JobDetailModal({
   onClose,
   onStatusChange,
   onDeleteJob,
+  onUpdateJob,
 }: {
   job: Job | null;
   onClose: () => void;
   onStatusChange?: (jobId: string, newStatus: JobStatus) => void;
   onDeleteJob?: (jobId: string) => void;
+  onUpdateJob?: (jobId: string, updatedData: Partial<Job>) => Promise<void>;
 }) {
+  const [isEditing, setIsEditing] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
+
+  // Edit form states matching AddJobModal
+  const [company, setCompany] = useState('');
+  const [title, setTitle] = useState('');
+  const [location, setLocation] = useState('');
+  const [currency, setCurrency] = useState('$');
+  const [salary, setSalary] = useState('');
+  const [jobType, setJobType] = useState<Job['jobType']>('full-time');
+  const [experienceLevel, setExperienceLevel] = useState('Senior');
+  const [status, setStatus] = useState<JobStatus>('saved');
+  const [skillsInput, setSkillsInput] = useState('');
+  const [notes, setNotes] = useState('');
+  const [sourceUrl, setSourceUrl] = useState('');
+
+  useEffect(() => {
+    if (job) {
+      setCompany(job.company || '');
+      setTitle(job.title || '');
+      setLocation(job.location || '');
+      
+      // Parse salary raw (e.g. "$120k" or "₱100,000") into currency & amount
+      const raw = job.salaryRaw || '';
+      const matchedCurrency = ['₱', '€', '£', 'A$', 'C$', 'S$', '¥', '$'].find((c) => raw.includes(c)) || '$';
+      setCurrency(matchedCurrency);
+      setSalary(raw.replace(matchedCurrency, '').trim());
+
+      setJobType(job.jobType || 'full-time');
+      setExperienceLevel(job.experienceLevel || 'Senior');
+      setStatus(job.status || 'saved');
+      setSkillsInput(job.requiredSkills ? job.requiredSkills.join(', ') : '');
+      setNotes(job.notes || '');
+      setSourceUrl(job.sourceUrl || '');
+      setIsEditing(false);
+    }
+  }, [job]);
+
   if (!job) return null;
 
   function formatDate(iso?: string) {
@@ -355,128 +401,335 @@ function JobDetailModal({
       .join(' ');
   }
 
+  const handleSave = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const trimmedCompany = company.trim();
+    const trimmedTitle = title.trim();
+
+    if (!trimmedCompany || !trimmedTitle) return;
+
+    const parsedSkills = skillsInput
+      ? skillsInput.split(',').map((s) => s.trim()).filter(Boolean)
+      : [];
+
+    const formattedSalary = salary.trim()
+      ? `${currency}${salary.trim()}`
+      : undefined;
+
+    setIsSaving(true);
+    try {
+      await onUpdateJob?.(job.id, {
+        company: trimmedCompany,
+        title: trimmedTitle,
+        location: location.trim() || undefined,
+        salaryRaw: formattedSalary,
+        jobType: jobType || 'full-time',
+        experienceLevel: experienceLevel || undefined,
+        status: status || 'saved',
+        requiredSkills: parsedSkills,
+        notes: notes.trim() || undefined,
+        sourceUrl: sourceUrl.trim() || undefined,
+      });
+      setIsEditing(false);
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
   return (
     <Modal open={!!job} onClose={onClose} size="md">
-      <div className="space-y-4">
-        {/* Company & Interactive Status Header */}
-        <div className="flex items-center justify-between gap-3">
-          <span className="font-mono text-xs font-semibold text-ink-muted uppercase tracking-wider">
-            {job.company}
-          </span>
-          <div className="relative">
-            <select
-              value={job.status}
-              aria-label={`Change status for ${job.title}`}
-              onChange={(e) => onStatusChange?.(job.id, e.target.value as JobStatus)}
-              className="opacity-0 absolute inset-0 w-full h-full cursor-pointer z-10"
-            >
-              <option value="saved">Saved</option>
-              <option value="applied">Applied</option>
-              <option value="interview">Interview</option>
-              <option value="offer">Offer</option>
-              <option value="rejected">Rejected</option>
-            </select>
-            <Badge variant={job.status} label={job.status} dot />
+      {isEditing ? (
+        <form onSubmit={handleSave} className="space-y-3">
+          <div className="flex items-center justify-between border-b border-line pb-2.5 mb-1">
+            <h2 className="text-base font-bold text-ink">Edit Application</h2>
+            <Badge variant={status} label={status} dot />
           </div>
-        </div>
 
-        {/* Role Title */}
-        <h2 className="text-xl font-bold text-ink leading-snug">{job.title}</h2>
+          {/* Row 1: Company & Title */}
+          <div className="grid grid-cols-2 gap-3">
+            <Input
+              label="Company"
+              placeholder="Vercel"
+              required
+              value={company}
+              onChange={(e) => setCompany(e.target.value)}
+              prefix={<Briefcase size={14} />}
+            />
+            <Input
+              label="Job Title"
+              placeholder="Senior Engineer"
+              required
+              value={title}
+              onChange={(e) => setTitle(e.target.value)}
+            />
+          </div>
 
-        {/* Clean 2x2 Metadata Grid with Icons */}
-        <div className="grid grid-cols-2 gap-y-2 gap-x-4 text-xs font-mono text-ink-muted">
-          <span className="flex items-center gap-1.5 truncate">
-            <MapPin size={13} className="text-ink-muted shrink-0" />
-            <span className="truncate">{job.location ? (job.remoteType === 'remote' ? 'Remote' : job.location) : 'Remote'}</span>
-          </span>
-          <span className="flex items-center gap-1.5 truncate">
-            <Briefcase size={13} className="text-ink-muted shrink-0" />
-            <span className="truncate">{formatJobType(job.jobType)} {job.experienceLevel ? `(${job.experienceLevel})` : ''}</span>
-          </span>
-          <span className="flex items-center gap-1.5 truncate">
-            <DollarSign size={13} className="text-ink-muted shrink-0" />
-            <span className="truncate">{job.salaryRaw || 'Salary not specified'}</span>
-          </span>
-          <span className="flex items-center gap-1.5 truncate">
-            <Calendar size={13} className="text-ink-muted shrink-0" />
-            <span className="truncate">Added {formatDate(job.createdAt)}</span>
-          </span>
-        </div>
-
-        {/* Required Skills */}
-        {job.requiredSkills.length > 0 && (
-          <div className="space-y-1.5">
-            <p className="text-[10px] font-mono uppercase tracking-widest text-ink-muted font-medium">
-              Required Skills
-            </p>
-            <div className="flex flex-wrap gap-1.5">
-              {job.requiredSkills.map((skill) => (
-                <span
-                  key={skill}
-                  className="text-xs px-2 py-0.5 bg-ink/5 text-ink rounded-sm font-mono"
+          {/* Row 2: Location, Job Type, Experience Level */}
+          <div className="grid grid-cols-3 gap-3">
+            <Input
+              label="Location"
+              placeholder="Remote"
+              value={location}
+              onChange={(e) => setLocation(e.target.value)}
+              prefix={<MapPin size={14} />}
+            />
+            <div className="flex flex-col gap-1.5">
+              <label htmlFor="edit-job-type-select" className="text-sm font-medium text-ink">Job Type</label>
+              <div className="relative">
+                <select
+                  id="edit-job-type-select"
+                  value={jobType}
+                  onChange={(e) => setJobType(e.target.value as Job['jobType'])}
+                  className="w-full bg-bg text-ink text-sm border border-line rounded-md pl-3 pr-8 py-2 h-[38px] focus:outline-none focus:border-ink/50 appearance-none cursor-pointer"
                 >
-                  {skill}
-                </span>
-              ))}
+                  <option value="full-time">Full-Time</option>
+                  <option value="contract">Contract</option>
+                  <option value="part-time">Part-Time</option>
+                  <option value="freelance">Freelance</option>
+                  <option value="internship">Internship</option>
+                </select>
+                <ChevronDown size={14} className="absolute right-3 top-1/2 -translate-y-1/2 text-ink-muted pointer-events-none" />
+              </div>
+            </div>
+            <div className="flex flex-col gap-1.5">
+              <label htmlFor="edit-job-level-select" className="text-sm font-medium text-ink">Level</label>
+              <div className="relative">
+                <select
+                  id="edit-job-level-select"
+                  value={experienceLevel}
+                  onChange={(e) => setExperienceLevel(e.target.value)}
+                  className="w-full bg-bg text-ink text-sm border border-line rounded-md pl-3 pr-8 py-2 h-[38px] focus:outline-none focus:border-ink/50 appearance-none cursor-pointer"
+                >
+                  <option value="Entry Level">Entry Level</option>
+                  <option value="Mid">Mid Level</option>
+                  <option value="Senior">Senior</option>
+                  <option value="Lead">Lead / Staff</option>
+                  <option value="Executive">Executive</option>
+                </select>
+                <ChevronDown size={14} className="absolute right-3 top-1/2 -translate-y-1/2 text-ink-muted pointer-events-none" />
+              </div>
             </div>
           </div>
-        )}
 
-        {/* Description (About the Role) */}
-        {job.description && (
-          <div className="space-y-1.5">
-            <p className="text-[10px] font-mono uppercase tracking-widest text-ink-muted font-medium">
-              About the Role
-            </p>
-            <p className="text-sm text-ink-muted leading-relaxed">
-              {job.description}
-            </p>
+          {/* Row 3: Currency, Salary Amount, Status */}
+          <div className="grid grid-cols-[115px_1fr_1fr] gap-3">
+            <div className="flex flex-col gap-1.5">
+              <label htmlFor="edit-currency-select" className="text-sm font-medium text-ink">Currency</label>
+              <div className="relative">
+                <select
+                  id="edit-currency-select"
+                  value={currency}
+                  onChange={(e) => setCurrency(e.target.value)}
+                  className="w-full bg-bg text-ink text-sm border border-line rounded-md pl-2 pr-7 py-2 h-[38px] focus:outline-none focus:border-ink/50 font-mono appearance-none cursor-pointer"
+                >
+                  <option value="$">USD ($)</option>
+                  <option value="₱">PHP (₱)</option>
+                  <option value="€">EUR (€)</option>
+                  <option value="£">GBP (£)</option>
+                  <option value="A$">AUD (A$)</option>
+                  <option value="C$">CAD (C$)</option>
+                  <option value="S$">SGD (S$)</option>
+                  <option value="¥">JPY (¥)</option>
+                </select>
+                <ChevronDown size={13} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-ink-muted pointer-events-none" />
+              </div>
+            </div>
+            <Input
+              label="Salary Amount"
+              placeholder="120k–160k"
+              value={salary}
+              onChange={(e) => setSalary(e.target.value)}
+            />
+            <div className="flex flex-col gap-1.5">
+              <label htmlFor="edit-job-status-select" className="text-sm font-medium text-ink">Status</label>
+              <div className="relative">
+                <select
+                  id="edit-job-status-select"
+                  value={status}
+                  onChange={(e) => setStatus(e.target.value as JobStatus)}
+                  className="w-full bg-bg text-ink text-sm border border-line rounded-md pl-3 pr-8 py-2 h-[38px] focus:outline-none focus:border-ink/50 capitalize appearance-none cursor-pointer"
+                >
+                  <option value="saved">Saved</option>
+                  <option value="applied">Applied</option>
+                  <option value="interview">Interview</option>
+                  <option value="offer">Offer</option>
+                  <option value="rejected">Rejected</option>
+                </select>
+                <ChevronDown size={14} className="absolute right-3 top-1/2 -translate-y-1/2 text-ink-muted pointer-events-none" />
+              </div>
+            </div>
           </div>
-        )}
 
-        {/* Notes */}
-        {job.notes && (
-          <div className="space-y-1.5">
-            <p className="text-[10px] font-mono uppercase tracking-widest text-ink-muted font-medium">
-              Notes
-            </p>
-            <p className="text-sm text-ink leading-relaxed">
-              {job.notes}
-            </p>
+          {/* Row 4: Skills & Posting URL */}
+          <div className="grid grid-cols-2 gap-3">
+            <Input
+              label="Required Skills"
+              placeholder="React, TypeScript, Next.js"
+              value={skillsInput}
+              onChange={(e) => setSkillsInput(e.target.value)}
+              hint="Comma separated."
+            />
+            <Input
+              label="Job Posting URL"
+              placeholder="https://..."
+              value={sourceUrl}
+              onChange={(e) => setSourceUrl(e.target.value)}
+              prefix={<Link2 size={14} />}
+            />
           </div>
-        )}
 
-        {/* Actions Footer */}
-        <div className="flex items-center justify-between gap-3 pt-3 border-t border-line">
-          <button
-            onClick={() => {
-              if (confirm('Delete this job application?')) {
-                onDeleteJob?.(job.id);
-                onClose();
-              }
-            }}
-            className="p-1.5 text-ink-muted hover:text-red-600 transition-colors rounded"
-            title="Delete Application"
-            aria-label="Delete application"
-          >
-            <Trash2 size={15} />
-          </button>
+          {/* Row 5: Personal Notes */}
+          <Textarea
+            label="Personal Notes"
+            placeholder="Recruiter contact, interview prep notes, referral source..."
+            value={notes}
+            onChange={(e) => setNotes(e.target.value)}
+            rows={2}
+          />
 
-          <div className="flex items-center gap-2">
-            {job.sourceUrl && (
-              <a href={job.sourceUrl} target="_blank" rel="noopener noreferrer">
-                <Button size="sm">
-                  <ExternalLink size={13} />
-                  View Posting
-                </Button>
-              </a>
-            )}
-            <Button variant="secondary" size="sm" onClick={onClose}>
-              Close
+          {/* Save / Cancel Footer */}
+          <div className="flex items-center justify-end gap-2 pt-3 border-t border-line">
+            <Button
+              type="button"
+              variant="secondary"
+              size="sm"
+              disabled={isSaving}
+              onClick={() => setIsEditing(false)}
+            >
+              Cancel
+            </Button>
+            <Button type="submit" size="sm" loading={isSaving}>
+              {isSaving ? 'Saving...' : 'Save Changes'}
             </Button>
           </div>
+        </form>
+      ) : (
+        <div className="space-y-4">
+          {/* Company & Interactive Status Header */}
+          <div className="flex items-center justify-between gap-3">
+            <span className="font-mono text-xs font-semibold text-ink-muted uppercase tracking-wider">
+              {job.company}
+            </span>
+            <div className="relative">
+              <select
+                value={job.status}
+                aria-label={`Change status for ${job.title}`}
+                onChange={(e) => onStatusChange?.(job.id, e.target.value as JobStatus)}
+                className="opacity-0 absolute inset-0 w-full h-full cursor-pointer z-10"
+              >
+                <option value="saved">Saved</option>
+                <option value="applied">Applied</option>
+                <option value="interview">Interview</option>
+                <option value="offer">Offer</option>
+                <option value="rejected">Rejected</option>
+              </select>
+              <Badge variant={job.status} label={job.status} dot />
+            </div>
+          </div>
+
+          {/* Role Title */}
+          <h2 className="text-xl font-bold text-ink leading-snug">{job.title}</h2>
+
+          {/* Clean 2x2 Metadata Grid with Icons */}
+          <div className="grid grid-cols-2 gap-y-2 gap-x-4 text-xs font-mono text-ink-muted">
+            <span className="flex items-center gap-1.5 truncate">
+              <MapPin size={13} className="text-ink-muted shrink-0" />
+              <span className="truncate">{job.location ? (job.remoteType === 'remote' ? 'Remote' : job.location) : 'Remote'}</span>
+            </span>
+            <span className="flex items-center gap-1.5 truncate">
+              <Briefcase size={13} className="text-ink-muted shrink-0" />
+              <span className="truncate">{formatJobType(job.jobType)} {job.experienceLevel ? `(${job.experienceLevel})` : ''}</span>
+            </span>
+            <span className="flex items-center gap-1.5 truncate">
+              <DollarSign size={13} className="text-ink-muted shrink-0" />
+              <span className="truncate">{job.salaryRaw || 'Salary not specified'}</span>
+            </span>
+            <span className="flex items-center gap-1.5 truncate">
+              <Calendar size={13} className="text-ink-muted shrink-0" />
+              <span className="truncate">Added {formatDate(job.createdAt)}</span>
+            </span>
+          </div>
+
+          {/* Required Skills */}
+          {job.requiredSkills.length > 0 && (
+            <div className="space-y-1.5">
+              <p className="text-[10px] font-mono uppercase tracking-widest text-ink-muted font-medium">
+                Required Skills
+              </p>
+              <div className="flex flex-wrap gap-1.5">
+                {job.requiredSkills.map((skill) => (
+                  <span
+                    key={skill}
+                    className="text-xs px-2 py-0.5 bg-ink/5 text-ink rounded-sm font-mono"
+                  >
+                    {skill}
+                  </span>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Description (About the Role) */}
+          {job.description && (
+            <div className="space-y-1.5">
+              <p className="text-[10px] font-mono uppercase tracking-widest text-ink-muted font-medium">
+                About the Role
+              </p>
+              <p className="text-sm text-ink-muted leading-relaxed">
+                {job.description}
+              </p>
+            </div>
+          )}
+
+          {/* Notes */}
+          {job.notes && (
+            <div className="space-y-1.5">
+              <p className="text-[10px] font-mono uppercase tracking-widest text-ink-muted font-medium">
+                Notes
+              </p>
+              <p className="text-sm text-ink leading-relaxed">
+                {job.notes}
+              </p>
+            </div>
+          )}
+
+          {/* Actions Footer */}
+          <div className="flex items-center justify-between gap-3 pt-3 border-t border-line">
+            <button
+              onClick={() => {
+                if (confirm('Delete this job application?')) {
+                  onDeleteJob?.(job.id);
+                  onClose();
+                }
+              }}
+              className="p-1.5 text-ink-muted hover:text-red-600 transition-colors rounded"
+              title="Delete Application"
+              aria-label="Delete application"
+            >
+              <Trash2 size={15} />
+            </button>
+
+            <div className="flex items-center gap-2">
+              <Button variant="secondary" size="sm" onClick={() => setIsEditing(true)}>
+                <PenLine size={13} />
+                Edit Details
+              </Button>
+
+              {job.sourceUrl && (
+                <a href={job.sourceUrl} target="_blank" rel="noopener noreferrer">
+                  <Button size="sm">
+                    <ExternalLink size={13} />
+                    View Posting
+                  </Button>
+                </a>
+              )}
+              <Button variant="secondary" size="sm" onClick={onClose}>
+                Close
+              </Button>
+            </div>
+          </div>
         </div>
-      </div>
+      )}
     </Modal>
   );
 }
@@ -499,7 +752,7 @@ export default function BoardPage() {
     async function loadJobs() {
       setIsLoading(true);
       try {
-        const res = await fetchJobs();
+        const res = await fetchJobs({ limit: 100 });
         setJobs(res.jobs || []);
       } catch (err) {
         console.warn('[Board] API load failed — user may be unauthenticated or API starting up:', err);
@@ -530,6 +783,26 @@ export default function BoardPage() {
     } catch (err) {
       console.error('Failed to update job status on server:', err);
       toast.error('Failed to update job status');
+    }
+  };
+
+  const handleUpdateJob = async (jobId: string, updatedData: Partial<Job>) => {
+    // Optimistic UI update
+    setJobs((prev) =>
+      prev.map((j) => (j.id === jobId ? { ...j, ...updatedData, updatedAt: new Date().toISOString() } : j))
+    );
+    setSelectedJob((prev) => (prev && prev.id === jobId ? { ...prev, ...updatedData } : prev));
+
+    try {
+      const res = await updateJob(jobId, updatedData);
+      if (res.job) {
+        setJobs((prev) => prev.map((j) => (j.id === jobId ? res.job : j)));
+        setSelectedJob((prev) => (prev && prev.id === jobId ? res.job : prev));
+      }
+      toast.success('Application updated!', 'Your changes have been saved.');
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : 'Unable to update job application.';
+      toast.error('Could not update application', msg);
     }
   };
 
@@ -601,7 +874,7 @@ export default function BoardPage() {
         />
       ) : viewMode === 'kanban' ? (
         <div className="flex-1 overflow-auto">
-          <div className="flex min-h-full gap-0 divide-x divide-line min-w-max items-start">
+          <div className="flex min-h-full gap-0 divide-x divide-line min-w-max items-stretch">
             {KANBAN_COLUMNS.map(({ id, label }) => (
               <KanbanColumn
                 key={id}
@@ -631,6 +904,7 @@ export default function BoardPage() {
         onClose={() => setSelectedJob(null)}
         onStatusChange={handleStatusChange}
         onDeleteJob={handleDeleteJob}
+        onUpdateJob={handleUpdateJob}
       />
       <WelcomeModal
         userName={user?.name || 'there'}

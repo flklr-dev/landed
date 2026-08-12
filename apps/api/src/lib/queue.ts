@@ -15,6 +15,15 @@ import IORedis from 'ioredis';
 // Shared Redis connection for all queues
 const connection = new IORedis(process.env.REDIS_URL || 'redis://localhost:6379', {
   maxRetriesPerRequest: null, // Required by BullMQ
+  enableOfflineQueue: false,
+});
+
+let hasLoggedQueueWarning = false;
+connection.on('error', () => {
+  if (!hasLoggedQueueWarning) {
+    console.warn('[Queue] Redis is offline — background AI extraction queues will run in sync/fallback mode.');
+    hasLoggedQueueWarning = true;
+  }
 });
 
 // ── Queue definitions ────────────────────────────────────────────────────────

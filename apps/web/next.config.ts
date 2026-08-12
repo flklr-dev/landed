@@ -1,6 +1,8 @@
 import type { NextConfig } from 'next';
 
 const nextConfig: NextConfig = {
+  // Tailscale / LAN access to dev server (HMR, _next assets)
+  allowedDevOrigins: ['100.117.225.87'],
   transpilePackages: ['@landed/shared-types'],
   async headers() {
     return [

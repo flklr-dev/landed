@@ -23,36 +23,36 @@ jobsRouter.use(requireAuth);
 // ── Schemas ──────────────────────────────────────────────────────────────────
 
 const CreateJobSchema = z.object({
-  company: z.string().min(1, 'Company is required'),
-  title: z.string().min(1, 'Title is required'),
-  location: z.string().optional(),
-  salaryRaw: z.string().optional(),
+  company: z.string().trim().min(1, 'Company is required').max(150, 'Company name cannot exceed 150 characters'),
+  title: z.string().trim().min(1, 'Title is required').max(150, 'Job title cannot exceed 150 characters'),
+  location: z.string().trim().max(200, 'Location cannot exceed 200 characters').optional(),
+  salaryRaw: z.string().trim().max(100, 'Salary text cannot exceed 100 characters').optional(),
   remoteType: z.enum(['remote', 'hybrid', 'onsite']).optional(),
   jobType: z.enum(['full-time', 'part-time', 'contract', 'freelance', 'internship']).optional(),
-  experienceLevel: z.string().optional(),
-  requiredSkills: z.array(z.string()).default([]),
-  description: z.string().optional(),
+  experienceLevel: z.string().trim().max(100).optional(),
+  requiredSkills: z.array(z.string().trim().max(50)).max(50, 'Cannot specify more than 50 skills').default([]),
+  description: z.string().max(20000, 'Description cannot exceed 20,000 characters').optional(),
   status: z.enum(['saved', 'applied', 'interview', 'offer', 'rejected']).default('saved'),
-  notes: z.string().optional(),
-  sourceUrl: z.string().url().optional(),
+  notes: z.string().max(5000, 'Notes cannot exceed 5,000 characters').optional(),
+  sourceUrl: z.string().url('Must be a valid URL').max(2000, 'URL cannot exceed 2,000 characters').optional(),
 });
 
 const UpdateJobSchema = z.object({
-  company: z.string().min(1).optional(),
-  title: z.string().min(1).optional(),
-  location: z.string().nullable().optional(),
-  salaryRaw: z.string().nullable().optional(),
+  company: z.string().trim().min(1).max(150).optional(),
+  title: z.string().trim().min(1).max(150).optional(),
+  location: z.string().trim().max(200).nullable().optional(),
+  salaryRaw: z.string().trim().max(100).nullable().optional(),
   remoteType: z.enum(['remote', 'hybrid', 'onsite']).nullable().optional(),
   jobType: z.enum(['full-time', 'part-time', 'contract', 'freelance', 'internship']).nullable().optional(),
-  experienceLevel: z.string().nullable().optional(),
-  requiredSkills: z.array(z.string()).optional(),
-  description: z.string().nullable().optional(),
+  experienceLevel: z.string().trim().max(100).nullable().optional(),
+  requiredSkills: z.array(z.string().trim().max(50)).max(50).optional(),
+  description: z.string().max(20000).nullable().optional(),
   status: z.enum(['saved', 'applied', 'interview', 'offer', 'rejected']).optional(),
-  notes: z.string().nullable().optional(),
+  notes: z.string().max(5000).nullable().optional(),
 });
 
 const ExtractUrlSchema = z.object({
-  url: z.string().url('Must be a valid URL'),
+  url: z.string().url('Must be a valid URL').max(2000, 'URL cannot exceed 2,000 characters'),
 });
 
 const ListJobsQuery = z.object({
@@ -65,9 +65,17 @@ const ListJobsQuery = z.object({
 
 // ── GET /api/jobs ────────────────────────────────────────────────────────────
 
-jobsRouter.get('/', validate('query', ListJobsQuery), async (req, res) => {
+// ── GET /api/jobs ────────────────────────────────────────────────────────────
+
+jobsRouter.get('/', async (req, res) => {
   try {
-    const { status, page, limit, sort, order } = req.query as unknown as z.infer<typeof ListJobsQuery>;
+    const parseResult = ListJobsQuery.safeParse(req.query);
+    if (!parseResult.success) {
+      res.status(400).json({ error: 'Invalid search filter parameters.' });
+      return;
+    }
+
+    const { status, page, limit, sort, order } = parseResult.data;
     const userId = req.user!.userId;
 
     const where = {
@@ -96,7 +104,7 @@ jobsRouter.get('/', validate('query', ListJobsQuery), async (req, res) => {
     });
   } catch (err) {
     console.error('[Jobs] List error:', err);
-    res.status(500).json({ error: 'Failed to fetch jobs' });
+    res.status(500).json({ error: 'Unable to load your applications. Please refresh or try again.' });
   }
 });
 
@@ -110,14 +118,14 @@ jobsRouter.get('/:id', async (req, res) => {
     });
 
     if (!job) {
-      res.status(404).json({ error: 'Job not found' });
+      res.status(404).json({ error: 'Job application not found.' });
       return;
     }
 
     res.json({ job });
   } catch (err) {
     console.error('[Jobs] Get error:', err);
-    res.status(500).json({ error: 'Failed to fetch job' });
+    res.status(500).json({ error: 'Unable to load application details.' });
   }
 });
 
@@ -156,7 +164,7 @@ jobsRouter.post('/', validate('body', CreateJobSchema), async (req, res) => {
     res.status(201).json({ job });
   } catch (err) {
     console.error('[Jobs] Create error:', err);
-    res.status(500).json({ error: 'Failed to create job' });
+    res.status(500).json({ error: 'Unable to create job application. Please check your inputs and try again.' });
   }
 });
 
@@ -188,11 +196,11 @@ jobsRouter.post('/extract', validate('body', ExtractUrlSchema), async (req, res)
     // Return 202 Accepted — the client should poll or use SSE for updates
     res.status(202).json({
       job,
-      message: 'Extraction queued. Poll GET /api/jobs/:id or subscribe to SSE for updates.',
+      message: 'Extraction queued.',
     });
   } catch (err) {
     console.error('[Jobs] Extract error:', err);
-    res.status(500).json({ error: 'Failed to start extraction' });
+    res.status(500).json({ error: 'Unable to extract job details. Please check the URL and try again.' });
   }
 });
 
@@ -210,7 +218,7 @@ jobsRouter.patch('/:id', validate('body', UpdateJobSchema), async (req, res) => 
     });
 
     if (!existing) {
-      res.status(404).json({ error: 'Job not found' });
+      res.status(404).json({ error: 'Job application not found.' });
       return;
     }
 
@@ -240,7 +248,7 @@ jobsRouter.patch('/:id', validate('body', UpdateJobSchema), async (req, res) => 
     res.json({ job });
   } catch (err) {
     console.error('[Jobs] Update error:', err);
-    res.status(500).json({ error: 'Failed to update job' });
+    res.status(500).json({ error: 'Unable to update job application. Please try again.' });
   }
 });
 
@@ -257,15 +265,15 @@ jobsRouter.delete('/:id', async (req, res) => {
     });
 
     if (!existing) {
-      res.status(404).json({ error: 'Job not found' });
+      res.status(404).json({ error: 'Job application not found.' });
       return;
     }
 
     await prisma.job.delete({ where: { id } });
 
-    res.json({ message: 'Job deleted' });
+    res.json({ message: 'Job application deleted.' });
   } catch (err) {
     console.error('[Jobs] Delete error:', err);
-    res.status(500).json({ error: 'Failed to delete job' });
+    res.status(500).json({ error: 'Unable to delete job application. Please try again.' });
   }
 });

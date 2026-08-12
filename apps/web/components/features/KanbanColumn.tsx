@@ -30,17 +30,11 @@ export function KanbanColumn({ id, label, jobs, onJobClick }: KanbanColumnProps)
         </span>
       </div>
 
-      {/* Cards container — natural height, no internal scrollbar */}
-      <div className="flex-1 flex flex-col gap-2 p-2 min-h-[200px]">
-        {jobs.length === 0 ? (
-          <div className="flex-1 flex items-center justify-center min-h-[120px] border border-dashed border-line rounded-none">
-            <p className="text-xs text-ink-muted/60 font-mono text-center">No jobs yet</p>
-          </div>
-        ) : (
-          jobs.map((job) => (
-            <JobCard key={job.id} job={job} onClick={() => onJobClick?.(job)} />
-          ))
-        )}
+      {/* Cards container — fills full height */}
+      <div className="flex-1 flex flex-col gap-2 p-2">
+        {jobs.map((job) => (
+          <JobCard key={job.id} job={job} onClick={() => onJobClick?.(job)} />
+        ))}
       </div>
     </div>
   );

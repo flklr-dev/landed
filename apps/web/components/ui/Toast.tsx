@@ -28,18 +28,18 @@ export function ToastContainer({ toasts, onDismiss }: ToastProps) {
   return (
     <div
       aria-live="polite"
-      className="fixed bottom-5 right-5 z-50 flex flex-col gap-2.5 max-w-sm w-full pointer-events-none px-4 sm:px-0"
+      className="fixed top-5 left-1/2 -translate-x-1/2 z-[100] flex flex-col items-center gap-2 max-w-md w-full pointer-events-none px-4"
     >
       {toasts.map((toast) => (
         <div
           key={toast.id}
           className={[
-            'pointer-events-auto flex items-start gap-3 p-3.5 rounded-lg border shadow-lg backdrop-blur-md transition-all duration-200 animate-in fade-in slide-in-from-bottom-3',
+            'pointer-events-auto w-full flex items-start gap-3 p-3.5 rounded-xl border shadow-xl backdrop-blur-md transition-all duration-200 animate-in fade-in slide-in-from-top-3',
             toast.type === 'success'
-              ? 'bg-bg/95 border-emerald-500/30 text-ink shadow-emerald-500/5'
+              ? 'bg-bg/95 border-emerald-500/40 text-ink shadow-emerald-500/10'
               : toast.type === 'error'
-              ? 'bg-bg/95 border-red-500/30 text-ink shadow-red-500/5'
-              : 'bg-bg/95 border-line text-ink shadow-black/5',
+              ? 'bg-bg/95 border-red-500/40 text-ink shadow-red-500/10'
+              : 'bg-bg/95 border-line text-ink shadow-black/10',
           ].join(' ')}
         >
           {/* Icon */}
@@ -55,7 +55,7 @@ export function ToastContainer({ toasts, onDismiss }: ToastProps) {
 
           {/* Content */}
           <div className="flex-1 text-xs leading-relaxed">
-            <span className="font-semibold text-ink block">{toast.title}</span>
+            <span className="font-semibold text-ink block text-sm">{toast.title}</span>
             {toast.message && (
               <span className="text-ink-muted block mt-0.5">{toast.message}</span>
             )}
@@ -64,8 +64,8 @@ export function ToastContainer({ toasts, onDismiss }: ToastProps) {
           {/* Dismiss button */}
           <button
             onClick={() => onDismiss(toast.id)}
-            className="text-ink-muted hover:text-ink transition-colors p-0.5 rounded-sm hover:bg-ink/5"
-            aria-label="Dismiss toast"
+            className="text-ink-muted hover:text-ink transition-colors p-1 rounded-md hover:bg-ink/5"
+            aria-label="Dismiss alert"
           >
             <X size={14} />
           </button>
