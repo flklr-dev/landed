@@ -28,46 +28,46 @@ export function ToastContainer({ toasts, onDismiss }: ToastProps) {
   return (
     <div
       aria-live="polite"
-      className="fixed top-5 left-1/2 -translate-x-1/2 z-[100] flex flex-col items-center gap-2 max-w-md w-full pointer-events-none px-4"
+      className="fixed top-4 left-1/2 -translate-x-1/2 z-[100] flex flex-col items-center gap-1.5 max-w-sm w-full pointer-events-none px-3"
     >
       {toasts.map((toast) => (
         <div
           key={toast.id}
           className={[
-            'pointer-events-auto w-full flex items-start gap-3 p-3.5 rounded-xl border shadow-xl backdrop-blur-md transition-all duration-200 animate-in fade-in slide-in-from-top-3',
+            'pointer-events-auto w-full flex items-center gap-2.5 px-3 py-2 rounded-lg border shadow-lg backdrop-blur-md transition-all duration-200 animate-in fade-in slide-in-from-top-2',
             toast.type === 'success'
-              ? 'bg-bg/95 border-emerald-500/40 text-ink shadow-emerald-500/10'
+              ? 'bg-bg/95 border-emerald-500/30 text-ink shadow-emerald-500/5'
               : toast.type === 'error'
-              ? 'bg-bg/95 border-red-500/40 text-ink shadow-red-500/10'
-              : 'bg-bg/95 border-line text-ink shadow-black/10',
+              ? 'bg-bg/95 border-red-500/30 text-ink shadow-red-500/5'
+              : 'bg-bg/95 border-line text-ink shadow-black/5',
           ].join(' ')}
         >
           {/* Icon */}
           {toast.type === 'success' && (
-            <CheckCircle2 size={18} className="text-emerald-500 shrink-0 mt-0.5" />
+            <CheckCircle2 size={15} className="text-emerald-500 shrink-0" />
           )}
           {toast.type === 'error' && (
-            <AlertCircle size={18} className="text-red-500 shrink-0 mt-0.5" />
+            <AlertCircle size={15} className="text-red-500 shrink-0" />
           )}
           {toast.type === 'info' && (
-            <Info size={18} className="text-ink-muted shrink-0 mt-0.5" />
+            <Info size={15} className="text-ink-muted shrink-0" />
           )}
 
           {/* Content */}
-          <div className="flex-1 text-xs leading-relaxed">
-            <span className="font-semibold text-ink block text-sm">{toast.title}</span>
+          <div className="flex-1 text-xs min-w-0 leading-tight">
+            <span className="font-semibold text-ink text-xs">{toast.title}</span>
             {toast.message && (
-              <span className="text-ink-muted block mt-0.5">{toast.message}</span>
+              <span className="text-ink-muted text-[11px] block mt-0.5 truncate">{toast.message}</span>
             )}
           </div>
 
           {/* Dismiss button */}
           <button
             onClick={() => onDismiss(toast.id)}
-            className="text-ink-muted hover:text-ink transition-colors p-1 rounded-md hover:bg-ink/5"
+            className="text-ink-muted hover:text-ink transition-colors p-0.5 rounded hover:bg-ink/5 shrink-0"
             aria-label="Dismiss alert"
           >
-            <X size={14} />
+            <X size={13} />
           </button>
         </div>
       ))}

@@ -781,6 +781,9 @@ export default function BoardPage() {
   }, [searchParams]);
 
   const handleStatusChange = async (jobId: string, newStatus: JobStatus) => {
+    const targetJob = jobs.find((j) => j.id === jobId);
+    if (targetJob?.status === newStatus) return;
+
     // Optimistic UI update
     setJobs((prev) =>
       prev.map((j) => (j.id === jobId ? { ...j, status: newStatus, updatedAt: new Date().toISOString() } : j))
@@ -789,8 +792,19 @@ export default function BoardPage() {
 
     try {
       await updateJob(jobId, { status: newStatus });
+      const statusLabels: Record<JobStatus, string> = {
+        saved: 'Saved',
+        applied: 'Applied',
+        interview: 'Interview',
+        offer: 'Offer',
+        rejected: 'Rejected',
+      };
+      toast.success('Status updated', `Moved to ${statusLabels[newStatus] || newStatus}`);
     } catch (err) {
       console.error('Failed to update job status on server:', err);
+      if (targetJob) {
+        setJobs((prev) => prev.map((j) => (j.id === jobId ? targetJob : j)));
+      }
       toast.error('Failed to update job status');
     }
   };
@@ -925,6 +939,7 @@ export default function BoardPage() {
                 label={label}
                 jobs={jobs.filter((j) => j.status === id)}
                 onJobClick={setSelectedJob}
+                onDropJob={handleStatusChange}
               />
             ))}
           </div>

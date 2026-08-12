@@ -1,3 +1,4 @@
+import { useState, useRef } from 'react';
 import type { Job } from '@landed/shared-types';
 import { Badge } from '@/components/ui/Badge';
 import { MapPin, ExternalLink, Clock, Loader2, Building2, Briefcase } from 'lucide-react';
@@ -5,6 +6,7 @@ import { MapPin, ExternalLink, Clock, Loader2, Building2, Briefcase } from 'luci
 interface JobCardProps {
   job: Job;
   onClick?: () => void;
+  onDragStart?: (job: Job, e: React.DragEvent<HTMLDivElement>) => void;
 }
 
 function formatRelativeDate(iso: string): string {
@@ -28,18 +30,41 @@ function formatJobType(type?: string): string {
     .join(' ');
 }
 
-export function JobCard({ job, onClick }: JobCardProps) {
+export function JobCard({ job, onClick, onDragStart }: JobCardProps) {
   const isExtracting = job.extractionStatus === 'pending';
+  const [isDragging, setIsDragging] = useState(false);
+  const dragOccurredRef = useRef(false);
 
   return (
     <div
-      onClick={onClick}
+      draggable
+      onDragStart={(e) => {
+        dragOccurredRef.current = true;
+        setIsDragging(true);
+        e.dataTransfer.setData('text/plain', job.id);
+        e.dataTransfer.effectAllowed = 'move';
+        onDragStart?.(job, e);
+      }}
+      onDragEnd={() => {
+        setIsDragging(false);
+        setTimeout(() => {
+          dragOccurredRef.current = false;
+        }, 50);
+      }}
+      onClick={(e) => {
+        if (dragOccurredRef.current) {
+          e.preventDefault();
+          e.stopPropagation();
+          return;
+        }
+        onClick?.();
+      }}
       className={[
         'bg-bg border border-line p-3 rounded-none',
         'transition-all duration-[120ms]',
         'hover:border-ink/25 hover:shadow-sm',
-        'cursor-pointer group',
-        'animate-fade-in',
+        'cursor-grab active:cursor-grabbing group select-none',
+        isDragging ? 'opacity-40 border-dashed border-ink/40 scale-[0.98]' : 'animate-fade-in',
       ].join(' ')}
     >
       {/* Company + external link */}

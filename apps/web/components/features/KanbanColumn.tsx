@@ -1,3 +1,6 @@
+'use client';
+
+import { useState } from 'react';
 import type { Job, JobStatus } from '@landed/shared-types';
 import { JobCard } from './JobCard';
 
@@ -6,6 +9,7 @@ interface KanbanColumnProps {
   label: string;
   jobs: Job[];
   onJobClick?: (job: Job) => void;
+  onDropJob?: (jobId: string, targetStatus: JobStatus) => void;
 }
 
 const columnAccents: Record<JobStatus, string> = {
@@ -16,9 +20,34 @@ const columnAccents: Record<JobStatus, string> = {
   rejected: 'bg-red-400',
 };
 
-export function KanbanColumn({ id, label, jobs, onJobClick }: KanbanColumnProps) {
+export function KanbanColumn({ id, label, jobs, onJobClick, onDropJob }: KanbanColumnProps) {
+  const [isDragOver, setIsDragOver] = useState(false);
+
   return (
-    <div className="flex flex-col w-64 shrink-0 min-h-full">
+    <div
+      onDragOver={(e) => {
+        e.preventDefault();
+        e.dataTransfer.dropEffect = 'move';
+        if (!isDragOver) setIsDragOver(true);
+      }}
+      onDragLeave={(e) => {
+        if (!e.currentTarget.contains(e.relatedTarget as Node)) {
+          setIsDragOver(false);
+        }
+      }}
+      onDrop={(e) => {
+        e.preventDefault();
+        setIsDragOver(false);
+        const jobId = e.dataTransfer.getData('text/plain');
+        if (jobId && onDropJob) {
+          onDropJob(jobId, id);
+        }
+      }}
+      className={[
+        'flex flex-col w-64 shrink-0 min-h-full transition-colors duration-150',
+        isDragOver ? 'bg-ink/[0.03] ring-2 ring-inset ring-ink/20' : '',
+      ].join(' ')}
+    >
       {/* Column header — sticky to the top of the board container as page scrolls */}
       <div className="flex items-center gap-2 px-3 py-2.5 border-b border-line bg-bg sticky top-0 z-10 shadow-[0_1px_2px_rgba(0,0,0,0.03)]">
         <span className={['w-2 h-2 rounded-full shrink-0', columnAccents[id]].join(' ')} />
@@ -31,7 +60,7 @@ export function KanbanColumn({ id, label, jobs, onJobClick }: KanbanColumnProps)
       </div>
 
       {/* Cards container — fills full height */}
-      <div className="flex-1 flex flex-col gap-2 p-2">
+      <div className="flex-1 flex flex-col gap-2 p-2 min-h-[120px]">
         {jobs.map((job) => (
           <JobCard key={job.id} job={job} onClick={() => onJobClick?.(job)} />
         ))}
