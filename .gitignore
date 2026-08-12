@@ -45,3 +45,9 @@ coverage/
 
 # Prisma
 packages/db/prisma/migrations/**/migration_lock.toml
+
+# Documentation and workspace rules
+*.md
+!README.md
+.agents/
+
