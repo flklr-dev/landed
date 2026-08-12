@@ -19,7 +19,7 @@ const sizeClasses = {
 };
 
 export function Modal({ open, onClose, title, description, size = 'md', children }: ModalProps) {
-  const overlayRef = useRef<HTMLDivElement>(null);
+  const panelRef = useRef<HTMLDivElement>(null);
 
   // Close on Escape
   useEffect(() => {
@@ -46,10 +46,11 @@ export function Modal({ open, onClose, title, description, size = 'md', children
 
   return (
     <div
-      ref={overlayRef}
       className="fixed inset-0 z-50 flex items-center justify-center p-4"
       onClick={(e) => {
-        if (e.target === overlayRef.current) onClose();
+        if (panelRef.current && !panelRef.current.contains(e.target as Node)) {
+          onClose();
+        }
       }}
     >
       {/* Backdrop */}
@@ -57,6 +58,7 @@ export function Modal({ open, onClose, title, description, size = 'md', children
 
       {/* Panel */}
       <div
+        ref={panelRef}
         className={[
           'relative w-full bg-bg border border-line',
           'rounded-none shadow-md',

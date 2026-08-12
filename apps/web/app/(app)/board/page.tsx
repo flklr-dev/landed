@@ -7,6 +7,7 @@ import { TopBar } from '@/components/features/TopBar';
 import { KanbanColumn } from '@/components/features/KanbanColumn';
 import { JobTable } from '@/components/features/JobTable';
 import { Modal } from '@/components/ui/Modal';
+import { ConfirmModal } from '@/components/ui/ConfirmModal';
 import { Input, Textarea } from '@/components/ui/Input';
 import { Button } from '@/components/ui/Button';
 import { Badge } from '@/components/ui/Badge';
@@ -40,6 +41,7 @@ import {
   Trash2,
   Table as TableIcon,
   Loader2,
+  X,
 } from 'lucide-react';
 
 // ── Add Job Modal ─────────────────────────────────────────────────────────────
@@ -588,7 +590,7 @@ function JobDetailModal({
           />
 
           {/* Save / Cancel Footer */}
-          <div className="flex items-center justify-end gap-2 pt-3 border-t border-line">
+          <div className="flex items-center justify-end gap-2 pt-1">
             <Button
               type="button"
               variant="secondary"
@@ -605,25 +607,35 @@ function JobDetailModal({
         </form>
       ) : (
         <div className="space-y-4">
-          {/* Company & Interactive Status Header */}
+          {/* Company, Interactive Status Header & Close Button */}
           <div className="flex items-center justify-between gap-3">
             <span className="font-mono text-xs font-semibold text-ink-muted uppercase tracking-wider">
               {job.company}
             </span>
-            <div className="relative">
-              <select
-                value={job.status}
-                aria-label={`Change status for ${job.title}`}
-                onChange={(e) => onStatusChange?.(job.id, e.target.value as JobStatus)}
-                className="opacity-0 absolute inset-0 w-full h-full cursor-pointer z-10"
+            <div className="flex items-center gap-2">
+              <div className="relative">
+                <select
+                  value={job.status}
+                  aria-label={`Change status for ${job.title}`}
+                  onChange={(e) => onStatusChange?.(job.id, e.target.value as JobStatus)}
+                  className="opacity-0 absolute inset-0 w-full h-full cursor-pointer z-10"
+                >
+                  <option value="saved">Saved</option>
+                  <option value="applied">Applied</option>
+                  <option value="interview">Interview</option>
+                  <option value="offer">Offer</option>
+                  <option value="rejected">Rejected</option>
+                </select>
+                <Badge variant={job.status} label={job.status} dot />
+              </div>
+              <button
+                onClick={onClose}
+                className="p-1 rounded text-ink-muted hover:text-ink hover:bg-ink/5 transition-colors"
+                aria-label="Close details modal"
+                title="Close"
               >
-                <option value="saved">Saved</option>
-                <option value="applied">Applied</option>
-                <option value="interview">Interview</option>
-                <option value="offer">Offer</option>
-                <option value="rejected">Rejected</option>
-              </select>
-              <Badge variant={job.status} label={job.status} dot />
+                <X size={16} />
+              </button>
             </div>
           </div>
 
@@ -694,13 +706,10 @@ function JobDetailModal({
           )}
 
           {/* Actions Footer */}
-          <div className="flex items-center justify-between gap-3 pt-3 border-t border-line">
+          <div className="flex items-center justify-between gap-3 pt-1">
             <button
               onClick={() => {
-                if (confirm('Delete this job application?')) {
-                  onDeleteJob?.(job.id);
-                  onClose();
-                }
+                onDeleteJob?.(job.id);
               }}
               className="p-1.5 text-ink-muted hover:text-red-600 transition-colors rounded"
               title="Delete Application"
@@ -723,9 +732,6 @@ function JobDetailModal({
                   </Button>
                 </a>
               )}
-              <Button variant="secondary" size="sm" onClick={onClose}>
-                Close
-              </Button>
             </div>
           </div>
         </div>
@@ -747,6 +753,9 @@ export default function BoardPage() {
   const [addJobOpen, setAddJobOpen] = useState(false);
   const [selectedJob, setSelectedJob] = useState<Job | null>(null);
   const [welcomeOpen, setWelcomeOpen] = useState(false);
+  const [jobToDelete, setJobToDelete] = useState<Job | null>(null);
+  const [openedFromDetail, setOpenedFromDetail] = useState<Job | null>(null);
+  const [isDeleting, setIsDeleting] = useState(false);
 
   useEffect(() => {
     async function loadJobs() {
@@ -806,16 +815,50 @@ export default function BoardPage() {
     }
   };
 
-  const handleDeleteJob = async (jobId: string) => {
-    setJobs((prev) => prev.filter((j) => j.id !== jobId));
+  const onRequestDeleteJob = (jobId: string) => {
+    const target = jobs.find((j) => j.id === jobId);
+    if (target) {
+      if (selectedJob?.id === jobId) {
+        setOpenedFromDetail(target);
+        setSelectedJob(null); // Close detail modal while confirmation is open
+      } else {
+        setOpenedFromDetail(null);
+      }
+      setJobToDelete(target);
+    }
+  };
+
+  const handleCancelDelete = () => {
+    if (openedFromDetail && jobToDelete?.id === openedFromDetail.id) {
+      setSelectedJob(openedFromDetail); // Re-open detail modal if user cancels
+    }
+    setJobToDelete(null);
+    setOpenedFromDetail(null);
+  };
+
+  const handleConfirmDelete = async () => {
+    if (!jobToDelete) return;
+    const targetJob = jobToDelete;
+
+    setIsDeleting(true);
+    // Optimistic UI update
+    setJobs((prev) => prev.filter((j) => j.id !== targetJob.id));
     setSelectedJob(null);
+    setOpenedFromDetail(null);
 
     try {
-      await deleteJob(jobId);
-      toast.success('Job deleted');
+      await deleteJob(targetJob.id);
+      toast.success('Application deleted', `${targetJob.title} at ${targetJob.company} has been removed.`);
     } catch (err) {
       console.error('Failed to delete job on server:', err);
-      toast.error('Failed to delete job');
+      // Rollback state if server fails
+      setJobs((prev) => [targetJob, ...prev]);
+      const msg = err instanceof Error ? err.message : 'Unable to delete application.';
+      toast.error('Could not delete application', msg);
+    } finally {
+      setIsDeleting(false);
+      setJobToDelete(null);
+      setOpenedFromDetail(null);
     }
   };
 
@@ -892,7 +935,7 @@ export default function BoardPage() {
             jobs={jobs}
             onJobClick={setSelectedJob}
             onStatusChange={handleStatusChange}
-            onDeleteJob={handleDeleteJob}
+            onDeleteJob={onRequestDeleteJob}
             onAddJob={() => setAddJobOpen(true)}
           />
         </div>
@@ -903,8 +946,22 @@ export default function BoardPage() {
         job={selectedJob}
         onClose={() => setSelectedJob(null)}
         onStatusChange={handleStatusChange}
-        onDeleteJob={handleDeleteJob}
+        onDeleteJob={onRequestDeleteJob}
         onUpdateJob={handleUpdateJob}
+      />
+      <ConfirmModal
+        open={!!jobToDelete}
+        onClose={handleCancelDelete}
+        onConfirm={handleConfirmDelete}
+        loading={isDeleting}
+        title="Delete Job Application"
+        description={
+          jobToDelete
+            ? `Are you sure you want to delete your application for "${jobToDelete.title}" at ${jobToDelete.company}? This action cannot be undone.`
+            : ''
+        }
+        confirmText="Delete Application"
+        variant="danger"
       />
       <WelcomeModal
         userName={user?.name || 'there'}
