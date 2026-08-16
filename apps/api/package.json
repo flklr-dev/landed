@@ -15,6 +15,7 @@
     "@landed/shared-types": "workspace:*",
     "bcryptjs": "^2.4.3",
     "bullmq": "^5.52.0",
+    "cheerio": "^1.0.0",
     "cors": "^2.8.5",
     "dotenv": "^16.5.0",
     "express": "^5.1.0",

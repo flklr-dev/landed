@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import type { Metadata } from 'next';
 import { useSearchParams } from 'next/navigation';
 import { TopBar } from '@/components/features/TopBar';
@@ -19,6 +19,7 @@ import {
   fetchJobs,
   createJob,
   extractJobFromUrl,
+  extractJobLive,
   updateJob,
   deleteJob,
 } from '@/lib/api-client';
@@ -42,6 +43,7 @@ import {
   Table as TableIcon,
   Loader2,
   X,
+  Sparkles,
 } from 'lucide-react';
 
 // ── Add Job Modal ─────────────────────────────────────────────────────────────
@@ -65,8 +67,8 @@ function AddJobModal({
   const [location, setLocation] = useState('');
   const [currency, setCurrency] = useState<string>('$');
   const [salary, setSalary] = useState('');
-  const [jobType, setJobType] = useState<Job['jobType']>('full-time');
-  const [experienceLevel, setExperienceLevel] = useState<string>('Senior');
+  const [jobType, setJobType] = useState<Job['jobType'] | ''>('');
+  const [experienceLevel, setExperienceLevel] = useState<string>('');
   const [status, setStatus] = useState<JobStatus>('saved');
   const [skillsInput, setSkillsInput] = useState<string>('');
   const [notes, setNotes] = useState('');
@@ -74,17 +76,41 @@ function AddJobModal({
   const toast = useToast();
 
   const handleExtract = async () => {
-    if (!url) return;
+    const trimmedUrl = url.trim();
+    if (!trimmedUrl) {
+      toast.error('URL Required', 'Please enter a valid job posting URL.');
+      return;
+    }
+
     setIsExtracting(true);
     try {
-      const res = await extractJobFromUrl(url);
-      onAddJob(res.job);
-      toast.success('Extraction queued!', 'Extracting job details with AI...');
-      setUrl('');
-      onClose();
+      const res = await extractJobLive(trimmedUrl);
+      if (res.success && res.data) {
+        const d = res.data;
+        if (d.company) setCompany(d.company);
+        if (d.title) setTitle(d.title);
+        if (d.location) setLocation(d.location);
+        if (d.jobType) setJobType(d.jobType);
+        if (d.experienceLevel) setExperienceLevel(d.experienceLevel);
+        if (d.requiredSkills && d.requiredSkills.length > 0) {
+          setSkillsInput(d.requiredSkills.join(', '));
+        }
+        // Note: Do NOT populate user notes from description. Notes are strictly personal.
+        if (d.salaryRaw) {
+          setSalary(d.salaryRaw);
+        }
+
+        // Switch to manual mode so user can review and tweak extracted fields
+        setMode('manual');
+        toast.success(
+          'Job Details Extracted!',
+          `Extracted ${d.title} at ${d.company}. Review and click Add Job.`
+        );
+      }
     } catch (err) {
-      const msg = err instanceof Error ? err.message : 'Extraction failed';
-      toast.error('Extraction failed', msg);
+      const errorMessage = err instanceof Error ? err.message : 'Could not fetch job details automatically.';
+      toast.error('Extraction Failed', errorMessage);
+      setMode('manual');
     } finally {
       setIsExtracting(false);
     }
@@ -114,11 +140,11 @@ function AddJobModal({
       const res = await createJob({
         company: trimmedCompany,
         title: trimmedTitle,
-        location: location.trim() || 'Remote',
+        location: location.trim() || undefined,
         salaryRaw: formattedSalary,
         remoteType: 'remote',
-        jobType: jobType || 'full-time',
-        experienceLevel: experienceLevel || 'Senior',
+        jobType: (jobType || undefined) as Job['jobType'] | undefined,
+        experienceLevel: experienceLevel.trim() || undefined,
         requiredSkills: parsedSkills,
         status: status || 'saved',
         notes: notes.trim() || undefined,
@@ -131,6 +157,8 @@ function AddJobModal({
       setTitle('');
       setLocation('');
       setSalary('');
+      setJobType('');
+      setExperienceLevel('');
       setSkillsInput('');
       setNotes('');
       onClose();
@@ -176,7 +204,14 @@ function AddJobModal({
             hint="AI will extract company, title, skills, salary, job type, and location automatically."
           />
           <Button fullWidth loading={isExtracting} onClick={handleExtract}>
-            {isExtracting ? 'Extracting details…' : 'Extract & Add Job'}
+            {isExtracting ? (
+              'Extracting with AI...'
+            ) : (
+              <span className="inline-flex items-center gap-2">
+                <Sparkles size={14} className="text-signal" />
+                Extract with AI
+              </span>
+            )}
           </Button>
         </div>
       ) : (
@@ -215,9 +250,10 @@ function AddJobModal({
                 <select
                   id="job-type-select"
                   value={jobType}
-                  onChange={(e) => setJobType(e.target.value as Job['jobType'])}
+                  onChange={(e) => setJobType(e.target.value as Job['jobType'] | '')}
                   className="w-full bg-bg text-ink text-sm border border-line rounded-md pl-3 pr-8 py-2 h-[38px] focus:outline-none focus:border-ink/50 appearance-none cursor-pointer"
                 >
+                  <option value="">— Select Type —</option>
                   <option value="full-time">Full-Time</option>
                   <option value="contract">Contract</option>
                   <option value="part-time">Part-Time</option>
@@ -236,6 +272,8 @@ function AddJobModal({
                   onChange={(e) => setExperienceLevel(e.target.value)}
                   className="w-full bg-bg text-ink text-sm border border-line rounded-md pl-3 pr-8 py-2 h-[38px] focus:outline-none focus:border-ink/50 appearance-none cursor-pointer"
                 >
+                  <option value="">— Select Level —</option>
+                  <option value="Intern">Intern</option>
                   <option value="Entry Level">Entry Level</option>
                   <option value="Mid">Mid Level</option>
                   <option value="Senior">Senior</option>
@@ -355,8 +393,8 @@ function JobDetailModal({
   const [location, setLocation] = useState('');
   const [currency, setCurrency] = useState('$');
   const [salary, setSalary] = useState('');
-  const [jobType, setJobType] = useState<Job['jobType']>('full-time');
-  const [experienceLevel, setExperienceLevel] = useState('Senior');
+  const [jobType, setJobType] = useState<Job['jobType'] | ''>('');
+  const [experienceLevel, setExperienceLevel] = useState('');
   const [status, setStatus] = useState<JobStatus>('saved');
   const [skillsInput, setSkillsInput] = useState('');
   const [notes, setNotes] = useState('');
@@ -374,8 +412,8 @@ function JobDetailModal({
       setCurrency(matchedCurrency);
       setSalary(raw.replace(matchedCurrency, '').trim());
 
-      setJobType(job.jobType || 'full-time');
-      setExperienceLevel(job.experienceLevel || 'Senior');
+      setJobType(job.jobType || '');
+      setExperienceLevel(job.experienceLevel || '');
       setStatus(job.status || 'saved');
       setSkillsInput(job.requiredSkills ? job.requiredSkills.join(', ') : '');
       setNotes(job.notes || '');
@@ -425,8 +463,8 @@ function JobDetailModal({
         title: trimmedTitle,
         location: location.trim() || undefined,
         salaryRaw: formattedSalary,
-        jobType: jobType || 'full-time',
-        experienceLevel: experienceLevel || undefined,
+        jobType: (jobType || undefined) as Job['jobType'] | undefined,
+        experienceLevel: experienceLevel.trim() || undefined,
         status: status || 'saved',
         requiredSkills: parsedSkills,
         notes: notes.trim() || undefined,
@@ -481,9 +519,10 @@ function JobDetailModal({
                 <select
                   id="edit-job-type-select"
                   value={jobType}
-                  onChange={(e) => setJobType(e.target.value as Job['jobType'])}
+                  onChange={(e) => setJobType(e.target.value as Job['jobType'] | '')}
                   className="w-full bg-bg text-ink text-sm border border-line rounded-md pl-3 pr-8 py-2 h-[38px] focus:outline-none focus:border-ink/50 appearance-none cursor-pointer"
                 >
+                  <option value="">— Select Type —</option>
                   <option value="full-time">Full-Time</option>
                   <option value="contract">Contract</option>
                   <option value="part-time">Part-Time</option>
@@ -502,6 +541,8 @@ function JobDetailModal({
                   onChange={(e) => setExperienceLevel(e.target.value)}
                   className="w-full bg-bg text-ink text-sm border border-line rounded-md pl-3 pr-8 py-2 h-[38px] focus:outline-none focus:border-ink/50 appearance-none cursor-pointer"
                 >
+                  <option value="">— Select Level —</option>
+                  <option value="Intern">Intern</option>
                   <option value="Entry Level">Entry Level</option>
                   <option value="Mid">Mid Level</option>
                   <option value="Senior">Senior</option>
@@ -650,7 +691,13 @@ function JobDetailModal({
             </span>
             <span className="flex items-center gap-1.5 truncate">
               <Briefcase size={13} className="text-ink-muted shrink-0" />
-              <span className="truncate">{formatJobType(job.jobType)} {job.experienceLevel ? `(${job.experienceLevel})` : ''}</span>
+              <span className="truncate">
+                {formatJobType(job.jobType) || job.experienceLevel ? (
+                  `${formatJobType(job.jobType)}${job.jobType && job.experienceLevel ? ' ' : ''}${job.experienceLevel ? `(${job.experienceLevel})` : ''}`
+                ) : (
+                  'Type not specified'
+                )}
+              </span>
             </span>
             <span className="flex items-center gap-1.5 truncate">
               <DollarSign size={13} className="text-ink-muted shrink-0" />
@@ -780,33 +827,46 @@ export default function BoardPage() {
     }
   }, [searchParams]);
 
-  const handleStatusChange = async (jobId: string, newStatus: JobStatus) => {
-    const targetJob = jobs.find((j) => j.id === jobId);
-    if (targetJob?.status === newStatus) return;
+  const statusDebounceTimers = useRef<Map<string, NodeJS.Timeout>>(new Map());
 
-    // Optimistic UI update
+  const handleStatusChange = (jobId: string, newStatus: JobStatus) => {
+    const targetJob = jobs.find((j) => j.id === jobId);
+    if (!targetJob || targetJob.status === newStatus) return;
+
+    // Optimistic UI update — instant visual feedback
     setJobs((prev) =>
       prev.map((j) => (j.id === jobId ? { ...j, status: newStatus, updatedAt: new Date().toISOString() } : j))
     );
     setSelectedJob((prev) => (prev && prev.id === jobId ? { ...prev, status: newStatus } : prev));
 
-    try {
-      await updateJob(jobId, { status: newStatus });
-      const statusLabels: Record<JobStatus, string> = {
-        saved: 'Saved',
-        applied: 'Applied',
-        interview: 'Interview',
-        offer: 'Offer',
-        rejected: 'Rejected',
-      };
-      toast.success('Status updated', `Moved to ${statusLabels[newStatus] || newStatus}`);
-    } catch (err) {
-      console.error('Failed to update job status on server:', err);
-      if (targetJob) {
-        setJobs((prev) => prev.map((j) => (j.id === jobId ? targetJob : j)));
-      }
-      toast.error('Failed to update job status');
+    // Clear previous pending update for this job if dragged rapidly
+    if (statusDebounceTimers.current.has(jobId)) {
+      clearTimeout(statusDebounceTimers.current.get(jobId)!);
     }
+
+    // Debounced server update (400ms)
+    const timer = setTimeout(async () => {
+      statusDebounceTimers.current.delete(jobId);
+      try {
+        await updateJob(jobId, { status: newStatus });
+        const statusLabels: Record<JobStatus, string> = {
+          saved: 'Saved',
+          applied: 'Applied',
+          interview: 'Interview',
+          offer: 'Offer',
+          rejected: 'Rejected',
+        };
+        toast.success('Status updated', `Moved to ${statusLabels[newStatus] || newStatus}`);
+      } catch (err) {
+        console.error('Failed to update job status on server:', err);
+        if (targetJob) {
+          setJobs((prev) => prev.map((j) => (j.id === jobId ? targetJob : j)));
+        }
+        toast.error('Failed to update job status');
+      }
+    }, 400);
+
+    statusDebounceTimers.current.set(jobId, timer);
   };
 
   const handleUpdateJob = async (jobId: string, updatedData: Partial<Job>) => {

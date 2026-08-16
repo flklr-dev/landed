@@ -18,13 +18,24 @@ const REDIS_URL = process.env.REDIS_URL || 'redis://localhost:6379';
 const connection = new IORedis(REDIS_URL, {
   maxRetriesPerRequest: null,
   enableOfflineQueue: false,
+  retryStrategy(times) {
+    // Retry with exponential backoff (capped at 10s) without spamming logs
+    return Math.min(times * 1000, 10000);
+  },
 });
 
-connection.on('error', (err) => {
-  console.warn('[Worker] Redis connection error:', err.message || err);
+let hasLoggedWorkerRedisWarning = false;
+connection.on('error', () => {
+  if (!hasLoggedWorkerRedisWarning) {
+    console.warn('[Worker] Redis is currently offline — worker will connect automatically when Redis starts.');
+    hasLoggedWorkerRedisWarning = true;
+  }
 });
 
-console.log('[Worker] Connecting to Redis:', REDIS_URL);
+connection.on('ready', () => {
+  console.log('[Worker] ✓ Connected to Redis successfully.');
+  hasLoggedWorkerRedisWarning = false;
+});
 
 // ── Job Extraction Worker ────────────────────────────────────────────────────
 
@@ -44,10 +55,10 @@ const extractionWorker = new Worker(
   },
 );
 
+extractionWorker.on('error', () => {});
 extractionWorker.on('completed', (job) => {
   console.log(`[Worker] ✓ Extraction completed: ${job.id}`);
 });
-
 extractionWorker.on('failed', (job, err) => {
   console.error(`[Worker] ✗ Extraction failed: ${job?.id}`, err.message);
 });
@@ -66,10 +77,10 @@ const resumeWorker = new Worker(
   },
 );
 
+resumeWorker.on('error', () => {});
 resumeWorker.on('completed', (job) => {
   console.log(`[Worker] ✓ Resume parse completed: ${job.id}`);
 });
-
 resumeWorker.on('failed', (job, err) => {
   console.error(`[Worker] ✗ Resume parse failed: ${job?.id}`, err.message);
 });
@@ -89,10 +100,10 @@ const matchWorker = new Worker(
   },
 );
 
+matchWorker.on('error', () => {});
 matchWorker.on('completed', (job) => {
   console.log(`[Worker] ✓ Match scoring completed: ${job.id}`);
 });
-
 matchWorker.on('failed', (job, err) => {
   console.error(`[Worker] ✗ Match scoring failed: ${job?.id}`, err.message);
 });

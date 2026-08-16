@@ -152,6 +152,27 @@ export async function extractJobFromUrl(url: string): Promise<{ job: Job; messag
   });
 }
 
+export async function extractJobLive(url: string): Promise<{
+  success: boolean;
+  data: {
+    company: string;
+    title: string;
+    location?: string | null;
+    salaryRaw?: string | null;
+    remoteType?: 'remote' | 'hybrid' | 'onsite' | null;
+    jobType?: 'full-time' | 'part-time' | 'contract' | 'freelance' | 'internship' | null;
+    experienceLevel?: string | null;
+    requiredSkills: string[];
+    description?: string | null;
+    sourceUrl: string;
+  };
+}> {
+  return request('/jobs/extract-live', {
+    method: 'POST',
+    body: JSON.stringify({ url }),
+  });
+}
+
 export async function updateJob(id: string, updates: Partial<Job>): Promise<{ job: Job }> {
   return request<{ job: Job }>(`/jobs/${id}`, {
     method: 'PATCH',

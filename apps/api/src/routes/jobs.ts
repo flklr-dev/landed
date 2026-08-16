@@ -14,6 +14,7 @@ import { prisma } from '@landed/db';
 import { requireAuth } from '../lib/auth.js';
 import { validate } from '../lib/validate.js';
 import { enqueueExtraction, enqueueMatchScoring } from '../lib/queue.js';
+import { extractJobDetails } from '../lib/job-extractor.js';
 
 export const jobsRouter = Router();
 
@@ -168,8 +169,29 @@ jobsRouter.post('/', validate('body', CreateJobSchema), async (req, res) => {
   }
 });
 
+// ── POST /api/jobs/extract-live ──────────────────────────────────────────────
+// Live synchronous extraction for pre-filling AddJobModal fields immediately.
+jobsRouter.post('/extract-live', validate('body', ExtractUrlSchema), async (req, res) => {
+  try {
+    const { url } = req.body as z.infer<typeof ExtractUrlSchema>;
+    const details = await extractJobDetails(url);
+
+    res.json({
+      success: true,
+      data: {
+        ...details,
+        sourceUrl: url,
+      },
+    });
+  } catch (err) {
+    console.error('[Jobs] Extract live error:', err);
+    const message = err instanceof Error ? err.message : 'Unable to extract job details from URL.';
+    res.status(422).json({ error: message });
+  }
+});
+
 // ── POST /api/jobs/extract ───────────────────────────────────────────────────
-// This is the core "paste a URL" flow from the PRD.
+// This is the background queued flow from the PRD.
 // Creates a placeholder job, enqueues extraction, returns immediately.
 
 jobsRouter.post('/extract', validate('body', ExtractUrlSchema), async (req, res) => {
