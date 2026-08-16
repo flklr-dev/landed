@@ -196,23 +196,31 @@ export function JobTable({
                     </div>
                   </td>
 
-                  {/* Location — reduced width (130px), wraps naturally if long */}
-                  <td className="py-3 px-4 text-xs text-ink-muted font-mono max-w-[130px] leading-tight break-words">
-                    {job.location ? (job.remoteType === 'remote' ? 'Remote' : job.location) : '—'}
+                  {/* Location */}
+                  <td className="py-3 px-4 text-xs text-ink-muted font-mono max-w-[130px]">
+                    <span
+                      className="block truncate"
+                      title={job.location ? (job.remoteType === 'remote' ? 'Remote' : job.location) : undefined}
+                    >
+                      {job.location ? (job.remoteType === 'remote' ? 'Remote' : job.location) : '—'}
+                    </span>
                   </td>
 
                   {/* Salary — clean mono text without duplicate $ icon */}
-                  <td className="py-3 px-4 text-xs font-mono text-ink-muted w-36 whitespace-nowrap">
-                    {job.salaryRaw || '—'}
+                  <td className="py-3 px-4 text-xs font-mono text-ink-muted w-36 max-w-[9rem]">
+                    <span className="block truncate" title={job.salaryRaw || undefined}>
+                      {job.salaryRaw || '—'}
+                    </span>
                   </td>
 
                   {/* Skills */}
                   <td className="py-3 px-4">
-                    <div className="flex flex-wrap gap-1 max-w-xs">
+                    <div className="flex flex-wrap gap-1 max-w-xs min-w-0">
                       {job.requiredSkills.slice(0, 3).map((skill) => (
                         <span
                           key={skill}
-                          className="text-[10px] px-1.5 py-0.5 bg-ink/5 text-ink-muted rounded-sm font-mono"
+                          className="max-w-full truncate text-[10px] px-1.5 py-0.5 bg-ink/5 text-ink-muted rounded-sm font-mono"
+                          title={skill}
                         >
                           {skill}
                         </span>

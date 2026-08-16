@@ -63,6 +63,7 @@ export function Modal({ open, onClose, title, description, size = 'md', children
           'relative w-full bg-bg border border-line',
           'rounded-none shadow-md',
           'animate-fade-in-scale',
+          'flex flex-col max-h-[90vh]',
           sizeClasses[size],
         ].join(' ')}
         role="dialog"
@@ -91,7 +92,7 @@ export function Modal({ open, onClose, title, description, size = 'md', children
         )}
 
         {/* Body */}
-        <div className="p-5">{children}</div>
+        <div className="p-5 overflow-y-auto">{children}</div>
       </div>
     </div>
   );

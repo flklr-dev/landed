@@ -61,6 +61,7 @@ export function JobCard({ job, onClick, onDragStart }: JobCardProps) {
       }}
       className={[
         'bg-bg border border-line p-3 rounded-none',
+        'w-full min-w-0 overflow-hidden',
         'transition-all duration-[120ms]',
         'hover:border-ink/25 hover:shadow-sm',
         'cursor-grab active:cursor-grabbing group select-none',
@@ -71,7 +72,9 @@ export function JobCard({ job, onClick, onDragStart }: JobCardProps) {
       <div className="flex items-start justify-between gap-2 mb-2">
         <div className="flex items-center gap-1.5 min-w-0">
           <Building2 size={13} className="text-ink-muted/80 shrink-0" />
-          <span className="text-xs text-ink-muted font-semibold truncate">{job.company}</span>
+          <span className="text-xs text-ink-muted font-semibold truncate" title={job.company}>
+            {job.company}
+          </span>
         </div>
 
         {job.sourceUrl && (
@@ -95,20 +98,23 @@ export function JobCard({ job, onClick, onDragStart }: JobCardProps) {
           <span className="text-xs text-ink-muted italic">Extracting details…</span>
         </div>
       ) : (
-        <h3 className="text-sm font-semibold text-ink leading-snug mb-2 line-clamp-2">
+        <h3 className="text-sm font-semibold text-ink leading-snug mb-2 line-clamp-2 break-words" title={job.title}>
           {job.title}
         </h3>
       )}
 
       {/* Job Type & Experience Pills */}
-      <div className="flex flex-wrap gap-1 mb-2.5">
+      <div className="flex flex-wrap gap-1 mb-2.5 min-w-0">
         {job.jobType && (
-          <span className="text-[9px] font-mono uppercase tracking-wider px-1.5 py-0.5 bg-ink/7 text-ink border border-line rounded-sm font-medium">
+          <span className="max-w-full truncate text-[9px] font-mono uppercase tracking-wider px-1.5 py-0.5 bg-ink/7 text-ink border border-line rounded-sm font-medium">
             {formatJobType(job.jobType)}
           </span>
         )}
         {job.experienceLevel && (
-          <span className="text-[9px] font-mono uppercase tracking-wider px-1.5 py-0.5 bg-ink/4 text-ink-muted border border-line/60 rounded-sm">
+          <span
+            className="max-w-full truncate text-[9px] font-mono uppercase tracking-wider px-1.5 py-0.5 bg-ink/4 text-ink-muted border border-line/60 rounded-sm"
+            title={job.experienceLevel}
+          >
             {job.experienceLevel}
           </span>
         )}
@@ -116,11 +122,12 @@ export function JobCard({ job, onClick, onDragStart }: JobCardProps) {
 
       {/* Skills */}
       {job.requiredSkills.length > 0 && (
-        <div className="flex flex-wrap gap-1 mb-3">
+        <div className="flex flex-wrap gap-1 mb-3 min-w-0">
           {job.requiredSkills.slice(0, 3).map((skill) => (
             <span
               key={skill}
-              className="text-[10px] px-1.5 py-0.5 bg-ink/5 text-ink-muted rounded-sm font-mono"
+              className="max-w-full truncate text-[10px] px-1.5 py-0.5 bg-ink/5 text-ink-muted rounded-sm font-mono"
+              title={skill}
             >
               {skill}
             </span>
@@ -134,12 +141,15 @@ export function JobCard({ job, onClick, onDragStart }: JobCardProps) {
       )}
 
       {/* Footer: meta */}
-      <div className="flex items-center justify-between gap-2 border-t border-line/50 pt-2">
-        <div className="flex items-center gap-1 text-ink-muted">
+      <div className="flex items-center justify-between gap-2 border-t border-line/50 pt-2 min-w-0">
+        <div className="flex items-center gap-1 text-ink-muted min-w-0 flex-1 overflow-hidden">
           {job.location && (
             <>
-              <MapPin size={10} />
-              <span className="text-[10px] font-mono truncate">
+              <MapPin size={10} className="shrink-0" />
+              <span
+                className="text-[10px] font-mono truncate"
+                title={job.remoteType === 'remote' ? 'Remote' : job.location}
+              >
                 {job.remoteType === 'remote' ? 'Remote' : job.location}
               </span>
             </>

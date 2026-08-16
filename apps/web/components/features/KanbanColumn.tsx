@@ -60,7 +60,7 @@ export function KanbanColumn({ id, label, jobs, onJobClick, onDropJob }: KanbanC
       </div>
 
       {/* Cards container — fills full height */}
-      <div className="flex-1 flex flex-col gap-2 p-2 min-h-[120px]">
+      <div className="flex-1 flex flex-col gap-2 p-2 min-h-[120px] min-w-0 overflow-hidden">
         {jobs.map((job) => (
           <JobCard key={job.id} job={job} onClick={() => onJobClick?.(job)} />
         ))}

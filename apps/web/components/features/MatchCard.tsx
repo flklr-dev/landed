@@ -35,7 +35,9 @@ export function MatchCard({ jobWithMatch, rank, onViewDetails }: MatchCardProps)
                 {company[0]}
               </span>
             </div>
-            <span className="text-xs text-panel-fg/60 font-medium">{company}</span>
+            <span className="text-xs text-panel-fg/60 font-medium truncate" title={company}>
+              {company}
+            </span>
           </div>
 
           <h3 className="text-sm font-semibold text-panel-fg leading-snug mb-2 line-clamp-1">
@@ -44,9 +46,12 @@ export function MatchCard({ jobWithMatch, rank, onViewDetails }: MatchCardProps)
 
           {/* Location */}
           {location && (
-            <div className="flex items-center gap-1 text-panel-fg/40 mb-3">
-              <MapPin size={10} />
-              <span className="text-[10px] font-mono">
+            <div className="flex items-center gap-1 text-panel-fg/40 mb-3 min-w-0">
+              <MapPin size={10} className="shrink-0" />
+              <span
+                className="text-[10px] font-mono truncate"
+                title={remoteType === 'remote' ? 'Remote' : location}
+              >
                 {remoteType === 'remote' ? 'Remote' : location}
               </span>
             </div>

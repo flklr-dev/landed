@@ -18,7 +18,6 @@ import { useToast } from '@/lib/toast-context';
 import {
   fetchJobs,
   createJob,
-  extractJobFromUrl,
   extractJobLive,
   updateJob,
   deleteJob,
@@ -48,6 +47,37 @@ import {
 
 // ── Add Job Modal ─────────────────────────────────────────────────────────────
 
+const SALARY_CURRENCIES = [
+  { value: 'A$', aliases: ['AUD', 'A$'] },
+  { value: 'C$', aliases: ['CAD', 'C$'] },
+  { value: 'S$', aliases: ['SGD', 'S$'] },
+  { value: '₱', aliases: ['PHP', '₱'] },
+  { value: '$', aliases: ['USD', '$'] },
+  { value: '€', aliases: ['EUR', '€'] },
+  { value: '£', aliases: ['GBP', '£'] },
+  { value: '¥', aliases: ['JPY', '¥'] },
+] as const;
+
+function splitSalaryRaw(raw: string): { currency?: string; amount: string } {
+  const value = raw.trim();
+  for (const option of SALARY_CURRENCIES) {
+    for (const alias of option.aliases) {
+      const match = value.match(new RegExp(`^${alias.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\s*`, 'i'));
+      if (match) {
+        return { currency: option.value, amount: value.slice(match[0].length).trim() };
+      }
+    }
+  }
+  return { amount: value };
+}
+
+function inferRemoteType(location: string): Job['remoteType'] | '' {
+  if (/\bhybrid\b/i.test(location)) return 'hybrid';
+  if (/\bremote|work[\s-]?from[\s-]?home\b/i.test(location)) return 'remote';
+  if (/\bon[\s-]?site|in[\s-]?office\b/i.test(location)) return 'onsite';
+  return '';
+}
+
 function AddJobModal({
   open,
   onClose,
@@ -68,12 +98,37 @@ function AddJobModal({
   const [currency, setCurrency] = useState<string>('$');
   const [salary, setSalary] = useState('');
   const [jobType, setJobType] = useState<Job['jobType'] | ''>('');
+  const [remoteType, setRemoteType] = useState<Job['remoteType'] | ''>('');
   const [experienceLevel, setExperienceLevel] = useState<string>('');
   const [status, setStatus] = useState<JobStatus>('saved');
   const [skillsInput, setSkillsInput] = useState<string>('');
   const [notes, setNotes] = useState('');
+  const formSessionRef = useRef(0);
 
   const toast = useToast();
+
+  const resetForm = () => {
+    setMode('url');
+    setUrl('');
+    setIsExtracting(false);
+    setCompany('');
+    setTitle('');
+    setLocation('');
+    setCurrency('$');
+    setSalary('');
+    setJobType('');
+    setRemoteType('');
+    setExperienceLevel('');
+    setStatus('saved');
+    setSkillsInput('');
+    setNotes('');
+  };
+
+  useEffect(() => {
+    if (!open) return;
+    formSessionRef.current += 1;
+    resetForm();
+  }, [open]);
 
   const handleExtract = async () => {
     const trimmedUrl = url.trim();
@@ -82,37 +137,40 @@ function AddJobModal({
       return;
     }
 
+    const session = formSessionRef.current;
     setIsExtracting(true);
     try {
       const res = await extractJobLive(trimmedUrl);
+      if (session !== formSessionRef.current) return;
       if (res.success && res.data) {
         const d = res.data;
         if (d.company) setCompany(d.company);
         if (d.title) setTitle(d.title);
         if (d.location) setLocation(d.location);
+        else if (d.remoteType === 'remote') setLocation('Remote');
+        if (d.remoteType) setRemoteType(d.remoteType);
         if (d.jobType) setJobType(d.jobType);
         if (d.experienceLevel) setExperienceLevel(d.experienceLevel);
         if (d.requiredSkills && d.requiredSkills.length > 0) {
           setSkillsInput(d.requiredSkills.join(', '));
         }
-        // Note: Do NOT populate user notes from description. Notes are strictly personal.
         if (d.salaryRaw) {
-          setSalary(d.salaryRaw);
+          const parsedSalary = splitSalaryRaw(d.salaryRaw);
+          if (parsedSalary.currency) setCurrency(parsedSalary.currency);
+          setSalary(parsedSalary.amount);
         }
 
         // Switch to manual mode so user can review and tweak extracted fields
         setMode('manual');
-        toast.success(
-          'Job Details Extracted!',
-          `Extracted ${d.title} at ${d.company}. Review and click Add Job.`
-        );
+        toast.success('Details extracted');
       }
     } catch (err) {
+      if (session !== formSessionRef.current) return;
       const errorMessage = err instanceof Error ? err.message : 'Could not fetch job details automatically.';
       toast.error('Extraction Failed', errorMessage);
       setMode('manual');
     } finally {
-      setIsExtracting(false);
+      if (session === formSessionRef.current) setIsExtracting(false);
     }
   };
 
@@ -132,8 +190,8 @@ function AddJobModal({
 
     let formattedSalary: string | undefined = undefined;
     if (salary.trim()) {
-      let cleaned = salary.trim().replace(/^[\$₱€£¥A-Za-z]+\s*/, '');
-      formattedSalary = `${currency}${cleaned}`;
+      const parsedSalary = splitSalaryRaw(salary);
+      formattedSalary = `${parsedSalary.currency || currency}${parsedSalary.amount}`;
     }
 
     try {
@@ -142,7 +200,7 @@ function AddJobModal({
         title: trimmedTitle,
         location: location.trim() || undefined,
         salaryRaw: formattedSalary,
-        remoteType: 'remote',
+        remoteType: (remoteType || undefined) as Job['remoteType'] | undefined,
         jobType: (jobType || undefined) as Job['jobType'] | undefined,
         experienceLevel: experienceLevel.trim() || undefined,
         requiredSkills: parsedSkills,
@@ -153,14 +211,6 @@ function AddJobModal({
 
       onAddJob(res.job);
       toast.success('Application created!', `${trimmedTitle} at ${trimmedCompany} has been saved.`);
-      setCompany('');
-      setTitle('');
-      setLocation('');
-      setSalary('');
-      setJobType('');
-      setExperienceLevel('');
-      setSkillsInput('');
-      setNotes('');
       onClose();
     } catch (err) {
       const msg = err instanceof Error ? err.message : 'Unable to save job application.';
@@ -201,15 +251,15 @@ function AddJobModal({
             value={url}
             onChange={(e) => setUrl(e.target.value)}
             prefix={<Link2 size={14} />}
-            hint="AI will extract company, title, skills, salary, job type, and location automatically."
+            hint="We’ll pre-fill the details this job page publishes."
           />
           <Button fullWidth loading={isExtracting} onClick={handleExtract}>
             {isExtracting ? (
-              'Extracting with AI...'
+              'Extracting...'
             ) : (
               <span className="inline-flex items-center gap-2">
                 <Sparkles size={14} className="text-signal" />
-                Extract with AI
+                Extract details
               </span>
             )}
           </Button>
@@ -235,15 +285,35 @@ function AddJobModal({
             />
           </div>
 
-          {/* Row 2: Location, Job Type, Experience Level */}
-          <div className="grid grid-cols-3 gap-3">
+          {/* Row 2: Location, Work Setup, Job Type, Experience Level */}
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
             <Input
               label="Location"
               placeholder="Remote"
               value={location}
-              onChange={(e) => setLocation(e.target.value)}
+              onChange={(e) => {
+                setLocation(e.target.value);
+                setRemoteType(inferRemoteType(e.target.value));
+              }}
               prefix={<MapPin size={14} />}
             />
+            <div className="flex flex-col gap-1.5">
+              <label htmlFor="remote-type-select" className="text-sm font-medium text-ink">Work Setup</label>
+              <div className="relative">
+                <select
+                  id="remote-type-select"
+                  value={remoteType}
+                  onChange={(e) => setRemoteType(e.target.value as Job['remoteType'] | '')}
+                  className="w-full bg-bg text-ink text-sm border border-line rounded-md pl-3 pr-8 py-2 h-[38px] focus:outline-none focus:border-ink/50 appearance-none cursor-pointer"
+                >
+                  <option value="">— Select —</option>
+                  <option value="remote">Remote</option>
+                  <option value="hybrid">Hybrid</option>
+                  <option value="onsite">On-site</option>
+                </select>
+                <ChevronDown size={14} className="absolute right-3 top-1/2 -translate-y-1/2 text-ink-muted pointer-events-none" />
+              </div>
+            </div>
             <div className="flex flex-col gap-1.5">
               <label htmlFor="job-type-select" className="text-sm font-medium text-ink">Job Type</label>
               <div className="relative">
@@ -650,7 +720,7 @@ function JobDetailModal({
         <div className="space-y-4">
           {/* Company, Interactive Status Header & Close Button */}
           <div className="flex items-center justify-between gap-3">
-            <span className="font-mono text-xs font-semibold text-ink-muted uppercase tracking-wider">
+            <span className="font-mono text-xs font-semibold text-ink-muted uppercase tracking-wider truncate min-w-0" title={job.company}>
               {job.company}
             </span>
             <div className="flex items-center gap-2">
@@ -681,7 +751,7 @@ function JobDetailModal({
           </div>
 
           {/* Role Title */}
-          <h2 className="text-xl font-bold text-ink leading-snug">{job.title}</h2>
+          <h2 className="text-xl font-bold text-ink leading-snug break-words">{job.title}</h2>
 
           {/* Clean 2x2 Metadata Grid with Icons */}
           <div className="grid grid-cols-2 gap-y-2 gap-x-4 text-xs font-mono text-ink-muted">
@@ -725,18 +795,6 @@ function JobDetailModal({
                   </span>
                 ))}
               </div>
-            </div>
-          )}
-
-          {/* Description (About the Role) */}
-          {job.description && (
-            <div className="space-y-1.5">
-              <p className="text-[10px] font-mono uppercase tracking-widest text-ink-muted font-medium">
-                About the Role
-              </p>
-              <p className="text-sm text-ink-muted leading-relaxed">
-                {job.description}
-              </p>
             </div>
           )}
 
