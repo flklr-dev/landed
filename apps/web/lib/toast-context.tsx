@@ -27,10 +27,11 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
 
     setToasts((prev) => [...prev.slice(-4), newToast]); // Limit to max 5 visible toasts
 
-    // Auto dismiss after 3.5s
+    // Auto dismiss after 4s (or 5s for errors)
+    const duration = type === 'error' ? 5000 : 3500;
     setTimeout(() => {
       setToasts((prev) => prev.filter((t) => t.id !== id));
-    }, 3500);
+    }, duration);
   }, []);
 
   const dismissToast = useCallback((id: string) => {

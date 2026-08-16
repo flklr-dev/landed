@@ -101,21 +101,37 @@ function isAuthWallPage($: cheerio.CheerioAPI, html: string): boolean {
   const ogTitle = ($('meta[property="og:title"]').attr('content') || '').trim().toLowerCase();
   const ogDesc = ($('meta[property="og:description"]').attr('content') || '').trim().toLowerCase();
 
-  const authPatterns = [
-    /sign in|log in|login|sign up|signup/i,
-    /authwall|security check|robot check|captcha|attention required|access denied/i,
-    /just a moment|cloudflare|enable javascript/i,
-    /keep in touch with people you know/i,
+  // If the page title/OG title explicitly denotes a login or security checkpoint page
+  const authTitlePatterns = [
+    /^linkedin:\s*log in/i,
+    /^linkedin login/i,
+    /^sign in\s*[|\-–]/i,
+    /^log in\s*[|\-–]/i,
+    /^login\s*[|\-–]/i,
     /login to linkedin/i,
+    /authwall/i,
+    /security verification/i,
+    /robot check/i,
+    /captcha/i,
+    /attention required/i,
+    /access denied/i,
+    /just a moment\.\.\./i,
+    /cloudflare/i,
   ];
 
-  for (const pattern of authPatterns) {
-    if (pattern.test(pageTitle) || pattern.test(ogTitle) || pattern.test(ogDesc)) {
+  for (const pattern of authTitlePatterns) {
+    if (pattern.test(pageTitle) || pattern.test(ogTitle)) {
       return true;
     }
   }
 
-  if ($('input[type="password"]').length > 0 && $('[itemtype*="JobPosting"], .job-description, .posting-header').length === 0) {
+  // Check for LinkedIn specific login wall description
+  if (/keep in touch with people you know, share ideas/i.test(ogDesc)) {
+    return true;
+  }
+
+  // If page title is generic "LinkedIn" with no job information
+  if (pageTitle === 'linkedin' || pageTitle === 'sign in' || pageTitle === 'log in') {
     return true;
   }
 
@@ -359,29 +375,56 @@ function extractFromJsonLd($: cheerio.CheerioAPI): Partial<ExtractedJob> | null 
  * 2. Extract from Meta tags & OpenGraph
  */
 function extractFromMetaTags($: cheerio.CheerioAPI, url: string): Partial<ExtractedJob> {
-  const ogTitle = $('meta[property="og:title"]').attr('content') || $('title').text() || '';
+  const rawOgTitle = $('meta[property="og:title"]').attr('content') || $('title').text() || '';
   const ogSiteName = $('meta[property="og:site_name"]').attr('content') || '';
-  const ogDesc = $('meta[property="og:description"]').attr('content') || $('meta[name="description"]').attr('content') || '';
+  const rawOgDesc = $('meta[property="og:description"]').attr('content') || $('meta[name="description"]').attr('content') || '';
 
   // Check if title is login or bot block screen
-  const isBogusTitle = /login|sign in|sign up|access denied|security check|robot check|cloudflare/i.test(ogTitle);
+  const isBogusTitle = /login|sign in|sign up|access denied|security check|robot check|cloudflare/i.test(rawOgTitle);
   if (isBogusTitle) return {};
 
-  let title = ogTitle;
-  let company = ogSiteName;
+  // Strip trailing platform suffixes like "| LinkedIn", "- Greenhouse", "• Lever"
+  const cleanTitleStr = rawOgTitle
+    .replace(/\s*[|\-–•]\s*(LinkedIn|Greenhouse|Lever|Ashby|Workable|Indeed|ZipRecruiter|Glassdoor)\s*$/i, '')
+    .trim();
 
-  if (ogTitle.includes(' at ')) {
-    const parts = ogTitle.split(' at ');
+  let title = '';
+  let company = ogSiteName;
+  let location: string | null = null;
+
+  // Pattern 1: "{Company} (is )?hiring (a |an |for )?{Title}( in {Location})?"
+  const hiringMatch = cleanTitleStr.match(/^(.+?)\s+(?:is\s+)?hiring(?:\s+(?:a|an|for\s+a|for\s+an|for))?\s+(.+?)(?:\s+in\s+(.+))?$/i);
+  if (hiringMatch) {
+    company = hiringMatch[1]!.trim();
+    title = hiringMatch[2]!.trim();
+    if (hiringMatch[3]) location = hiringMatch[3].trim();
+  }
+  // Pattern 2: "{Title} at {Company}( in {Location})?"
+  else if (cleanTitleStr.includes(' at ')) {
+    const parts = cleanTitleStr.split(' at ');
+    title = parts[0]!.trim();
+    const remaining = parts[1]!.trim();
+    if (remaining.includes(' in ')) {
+      const [c, l] = remaining.split(' in ');
+      if (!company) company = c!.trim();
+      location = l!.trim();
+    } else {
+      if (!company) company = remaining.split(/[-–|]/)[0]!.trim();
+    }
+  }
+  // Pattern 3: "{Title} - {Company}"
+  else if (cleanTitleStr.includes(' - ')) {
+    const parts = cleanTitleStr.split(' - ');
     title = parts[0]!.trim();
     if (!company) company = parts[1]!.split(/[-–|]/)[0]!.trim();
-  } else if (ogTitle.includes(' - ')) {
-    const parts = ogTitle.split(' - ');
-    title = parts[0]!.trim();
-    if (!company) company = parts[1]!.split(/[-–|]/)[0]!.trim();
-  } else if (ogTitle.includes(' | ')) {
-    const parts = ogTitle.split(' | ');
+  }
+  // Pattern 4: "{Title} | {Company}"
+  else if (cleanTitleStr.includes(' | ')) {
+    const parts = cleanTitleStr.split(' | ');
     title = parts[0]!.trim();
     if (!company) company = parts[1]!.trim();
+  } else {
+    title = cleanTitleStr;
   }
 
   // Fallback to URL slug if empty
@@ -396,11 +439,18 @@ function extractFromMetaTags($: cheerio.CheerioAPI, url: string): Partial<Extrac
 
   if (!title || !company) return {};
 
+  const cleanDesc = rawOgDesc
+    .replace(/^Posted\s+[\d:APM\s.]+/i, '')
+    .replace(/See this and similar jobs on LinkedIn\.?/i, '')
+    .trim();
+
   return {
     title: title.trim(),
     company: company.trim(),
-    description: ogDesc.slice(0, 300).trim() || null,
-    requiredSkills: extractSkillsHeuristically(ogDesc),
+    location: location || null,
+    remoteType: (location && location.toLowerCase().includes('remote')) ? 'remote' : null,
+    description: cleanDesc.slice(0, 500).trim() || null,
+    requiredSkills: extractSkillsHeuristically(cleanDesc),
   };
 }
 

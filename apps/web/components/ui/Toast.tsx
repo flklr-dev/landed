@@ -28,13 +28,13 @@ export function ToastContainer({ toasts, onDismiss }: ToastProps) {
   return (
     <div
       aria-live="polite"
-      className="fixed top-4 left-1/2 -translate-x-1/2 z-[100] flex flex-col items-center gap-1.5 max-w-sm w-full pointer-events-none px-3"
+      className="fixed top-4 left-1/2 -translate-x-1/2 z-[100] flex flex-col items-center gap-2 max-w-md w-full pointer-events-none px-4"
     >
       {toasts.map((toast) => (
         <div
           key={toast.id}
           className={[
-            'pointer-events-auto w-full flex items-center gap-2.5 px-3 py-2 rounded-lg border shadow-lg backdrop-blur-md transition-all duration-200 animate-in fade-in slide-in-from-top-2',
+            'pointer-events-auto w-full flex items-start gap-3 px-3.5 py-2.5 rounded-lg border shadow-lg backdrop-blur-md transition-all duration-200 animate-in fade-in slide-in-from-top-2',
             toast.type === 'success'
               ? 'bg-bg/95 border-emerald-500/30 text-ink shadow-emerald-500/5'
               : toast.type === 'error'
@@ -43,31 +43,33 @@ export function ToastContainer({ toasts, onDismiss }: ToastProps) {
           ].join(' ')}
         >
           {/* Icon */}
-          {toast.type === 'success' && (
-            <CheckCircle2 size={15} className="text-emerald-500 shrink-0" />
-          )}
-          {toast.type === 'error' && (
-            <AlertCircle size={15} className="text-red-500 shrink-0" />
-          )}
-          {toast.type === 'info' && (
-            <Info size={15} className="text-ink-muted shrink-0" />
-          )}
+          <div className="shrink-0 mt-0.5">
+            {toast.type === 'success' && (
+              <CheckCircle2 size={16} className="text-emerald-500" />
+            )}
+            {toast.type === 'error' && (
+              <AlertCircle size={16} className="text-red-500" />
+            )}
+            {toast.type === 'info' && (
+              <Info size={16} className="text-ink-muted" />
+            )}
+          </div>
 
           {/* Content */}
-          <div className="flex-1 text-xs min-w-0 leading-tight">
-            <span className="font-semibold text-ink text-xs">{toast.title}</span>
+          <div className="flex-1 text-xs min-w-0">
+            <span className="font-semibold text-ink text-xs block leading-snug">{toast.title}</span>
             {toast.message && (
-              <span className="text-ink-muted text-[11px] block mt-0.5 truncate">{toast.message}</span>
+              <p className="text-ink-muted text-xs mt-0.5 leading-relaxed break-words">{toast.message}</p>
             )}
           </div>
 
           {/* Dismiss button */}
           <button
             onClick={() => onDismiss(toast.id)}
-            className="text-ink-muted hover:text-ink transition-colors p-0.5 rounded hover:bg-ink/5 shrink-0"
+            className="text-ink-muted hover:text-ink transition-colors p-1 rounded hover:bg-ink/5 shrink-0 -mr-1"
             aria-label="Dismiss alert"
           >
-            <X size={13} />
+            <X size={14} />
           </button>
         </div>
       ))}
