@@ -4,7 +4,13 @@
 // Supports token injection, structured error handling, and JSON parsing.
 // ─────────────────────────────────────────────────────────────────────────────
 
-import type { Job, JobStatus, User } from '@landed/shared-types';
+import type {
+  Job,
+  JobStatus,
+  User,
+  QuickUpdateResult,
+  QuickUpdateRequest,
+} from '@landed/shared-types';
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000/api';
 
@@ -183,6 +189,13 @@ export async function updateJob(id: string, updates: Partial<Job>): Promise<{ jo
 export async function deleteJob(id: string): Promise<{ message: string }> {
   return request<{ message: string }>(`/jobs/${id}`, {
     method: 'DELETE',
+  });
+}
+
+export async function quickUpdateJob(payload: QuickUpdateRequest): Promise<QuickUpdateResult> {
+  return request<QuickUpdateResult>('/jobs/quick-update', {
+    method: 'POST',
+    body: JSON.stringify(payload),
   });
 }
 

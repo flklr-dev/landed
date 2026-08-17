@@ -96,6 +96,9 @@ async function fetchJobPage(url: string): Promise<string | null> {
 }
 
 async function extractWithLLM(cleanText: string): Promise<ParsedJob | null> {
+  // Hard fence: URL extraction remains purely deterministic unless explicitly enabled
+  if (process.env.EXTRACT_USE_LLM !== 'true') return null;
+
   const apiKey = process.env.XAI_API_KEY || process.env.OPENAI_API_KEY;
   if (!apiKey || cleanText.length < 50) return null;
 

@@ -15,6 +15,8 @@ import { requireAuth } from '../lib/auth.js';
 import { validate } from '../lib/validate.js';
 import { enqueueExtraction, enqueueMatchScoring } from '../lib/queue.js';
 import { extractJobDetails } from '../lib/job-extractor.js';
+import { resolveQuickUpdate } from '../lib/quick-update.js';
+import { userRateLimit } from '../lib/rate-limit.js';
 
 export const jobsRouter = Router();
 
@@ -22,6 +24,19 @@ export const jobsRouter = Router();
 jobsRouter.use(requireAuth);
 
 // ── Schemas ──────────────────────────────────────────────────────────────────
+
+const QuickUpdateSchema = z.object({
+  text: z.string().trim().max(500).optional(),
+  confirmedJobId: z.string().optional(),
+  proposedChanges: z.object({
+    company: z.string().trim().max(150).optional(),
+    title: z.string().trim().max(150).optional(),
+    status: z.enum(['saved', 'applied', 'interview', 'offer', 'rejected']).optional(),
+    notes: z.string().max(5000).optional(),
+    location: z.string().trim().max(200).optional(),
+    salaryRaw: z.string().trim().max(100).optional(),
+  }).optional(),
+});
 
 const CreateJobSchema = z.object({
   company: z.string().trim().min(1, 'Company is required').max(150, 'Company name cannot exceed 150 characters'),
@@ -187,6 +202,101 @@ jobsRouter.post('/extract-live', validate('body', ExtractUrlSchema), async (req,
     console.error('[Jobs] Extract live error:', err);
     const message = err instanceof Error ? err.message : 'Unable to extract job details from URL.';
     res.status(422).json({ error: message });
+  }
+});
+
+// ── POST /api/jobs/quick-update ──────────────────────────────────────────────
+// Natural-language quick update (e.g. "Got rejected from Cloudstaff") or confirmed disambiguation
+jobsRouter.post('/quick-update', userRateLimit(20, 60_000), validate('body', QuickUpdateSchema), async (req, res) => {
+  try {
+    const userId = req.user!.userId;
+    const { text, confirmedJobId, proposedChanges } = req.body as z.infer<typeof QuickUpdateSchema>;
+
+    // Case 1: User is confirming a specific job from a previous disambiguation picker or create-job action
+    if (confirmedJobId) {
+      const existing = await prisma.job.findFirst({
+        where: { id: confirmedJobId, userId },
+      });
+
+      if (!existing) {
+        res.status(404).json({ error: 'Selected application not found.' });
+        return;
+      }
+
+      const newStatus = proposedChanges?.status;
+      const appliedAt = newStatus === 'applied' && existing.status !== 'applied'
+        ? new Date()
+        : undefined;
+
+      let updatedNotes = existing.notes;
+      if (proposedChanges?.notes) {
+        updatedNotes = existing.notes
+          ? `${existing.notes}\n${proposedChanges.notes}`
+          : proposedChanges.notes;
+      }
+
+      const updated = await prisma.job.update({
+        where: { id: confirmedJobId },
+        data: {
+          ...(newStatus ? { status: newStatus } : {}),
+          ...(updatedNotes !== undefined ? { notes: updatedNotes } : {}),
+          ...(appliedAt ? { appliedAt } : {}),
+        },
+      });
+
+      res.json({
+        action: 'updated',
+        message: `Updated ${updated.title} at ${updated.company} to ${updated.status}.`,
+        job: updated,
+      });
+      return;
+    }
+
+    // Case 2: Natural-language text resolution
+    if (!text) {
+      res.status(400).json({ error: 'Please provide a text update (e.g. "Got rejected from Stripe").' });
+      return;
+    }
+
+    // Fetch user's current tracked jobs
+    const userJobs = await prisma.job.findMany({
+      where: { userId },
+      orderBy: { updatedAt: 'desc' },
+    });
+
+    const result = await resolveQuickUpdate(text, userJobs as any);
+
+    // If a high-confidence match was resolved, apply the changes in the database immediately
+    if (result.action === 'updated' && result.job && result.proposedChanges) {
+      const targetId = result.job.id;
+      const newStatus = result.proposedChanges.status;
+      const appliedAt = newStatus === 'applied' && result.job.status !== 'applied'
+        ? new Date()
+        : undefined;
+
+      let updatedNotes = result.job.notes;
+      if (result.proposedChanges.notes) {
+        updatedNotes = result.job.notes
+          ? `${result.job.notes}\n${result.proposedChanges.notes}`
+          : result.proposedChanges.notes;
+      }
+
+      const updated = await prisma.job.update({
+        where: { id: targetId },
+        data: {
+          ...(newStatus ? { status: newStatus } : {}),
+          ...(updatedNotes !== undefined ? { notes: updatedNotes } : {}),
+          ...(appliedAt ? { appliedAt } : {}),
+        },
+      });
+
+      result.job = updated as any;
+    }
+
+    res.json(result);
+  } catch (err) {
+    console.error('[Jobs] Quick update error:', err);
+    res.status(500).json({ error: 'Unable to process quick update. Please try again.' });
   }
 });
 

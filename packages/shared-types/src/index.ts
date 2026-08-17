@@ -142,3 +142,30 @@ export interface ComputeMatchPayload {
   userId: string;
   jobId?: string; // undefined = recompute all
 }
+
+// ── Natural-Language Quick Update Types ────────────────────────────────────────
+
+export type QuickUpdateAction = 'updated' | 'disambiguate' | 'created' | 'not_found';
+
+export interface QuickUpdateProposedChanges {
+  company?: string;
+  title?: string;
+  status?: JobStatus;
+  notes?: string;
+  location?: string;
+  salaryRaw?: string;
+}
+
+export interface QuickUpdateResult {
+  action: QuickUpdateAction;
+  message: string;
+  job?: Job;
+  candidates?: Job[];
+  proposedChanges?: QuickUpdateProposedChanges;
+}
+
+export interface QuickUpdateRequest {
+  text?: string;
+  confirmedJobId?: string;
+  proposedChanges?: QuickUpdateProposedChanges;
+}
