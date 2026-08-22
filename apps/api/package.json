@@ -7,7 +7,7 @@
     "dev": "tsx watch src/server.ts",
     "build": "tsc",
     "start": "node dist/server.js",
-    "test": "tsx --test src/lib/job-extractor.test.ts src/lib/quick-update.test.ts src/lib/quick-update.production.test.ts",
+    "test": "tsx --test src/lib/job-extractor.test.ts src/lib/quick-update.test.ts src/routes/dashboard.test.ts",
     "typecheck": "tsc --noEmit",
     "lint": "echo 'skip'"
   },

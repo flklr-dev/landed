@@ -107,6 +107,15 @@ export interface DashboardStats {
   total: number;
   byStatus: Record<JobStatus, number>;
   recentActivity: ActivityEntry[];
+  weeklyAppliedCount: number;
+  topSkills: Array<{ name: string; count: number }>;
+  topSavedMatches: Array<{
+    id: string;
+    company: string;
+    title: string;
+    score: number | null;
+  }>;
+  hasResume: boolean;
 }
 
 export interface ActivityEntry {

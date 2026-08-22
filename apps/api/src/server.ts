@@ -18,6 +18,7 @@ import { authRouter } from './routes/auth.js';
 import { jobsRouter } from './routes/jobs.js';
 import { matchesRouter } from './routes/matches.js';
 import { sseRouter } from './routes/sse.js';
+import { dashboardRouter } from './routes/dashboard.js';
 import { apiRateLimiter } from './lib/rate-limiter.js';
 
 const app = express();
@@ -50,6 +51,7 @@ app.use('/api/auth', authRouter);
 app.use('/api/jobs', jobsRouter);
 app.use('/api/matches', matchesRouter);
 app.use('/api/sse', sseRouter);
+app.use('/api/dashboard', dashboardRouter);
 
 // ── Global error handler ────────────────────────────────────────────────────
 // Keeps errors from leaking stack traces in production.

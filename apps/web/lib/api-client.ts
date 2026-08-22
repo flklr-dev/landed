@@ -10,6 +10,7 @@ import type {
   User,
   QuickUpdateResult,
   QuickUpdateRequest,
+  DashboardStats,
 } from '@landed/shared-types';
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000/api';
@@ -203,4 +204,10 @@ export async function quickUpdateJob(payload: QuickUpdateRequest): Promise<Quick
 
 export async function fetchMatches(): Promise<{ matches: Array<{ score: number; job: Job }>; hasResume: boolean }> {
   return request('/matches');
+}
+
+// ── Dashboard endpoints ──────────────────────────────────────────────────────
+
+export async function fetchDashboardStats(): Promise<DashboardStats> {
+  return request<DashboardStats>('/dashboard');
 }
