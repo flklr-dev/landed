@@ -145,7 +145,12 @@ export interface ComputeMatchPayload {
 
 // ── Natural-Language Quick Update Types ────────────────────────────────────────
 
-export type QuickUpdateAction = 'updated' | 'disambiguate' | 'created' | 'not_found';
+export type QuickUpdateAction =
+  | 'updated'
+  | 'unchanged'
+  | 'disambiguate'
+  | 'created'
+  | 'not_found';
 
 export interface QuickUpdateProposedChanges {
   company?: string;
@@ -156,12 +161,15 @@ export interface QuickUpdateProposedChanges {
   salaryRaw?: string;
 }
 
+export type QuickUpdateParser = 'regex' | 'gemini';
+
 export interface QuickUpdateResult {
   action: QuickUpdateAction;
   message: string;
   job?: Job;
   candidates?: Job[];
   proposedChanges?: QuickUpdateProposedChanges;
+  parsedBy?: QuickUpdateParser;
 }
 
 export interface QuickUpdateRequest {

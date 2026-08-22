@@ -10,17 +10,39 @@
 //    - Score < 0.50 -> Offer to create new job
 // ─────────────────────────────────────────────────────────────────────────────
 
-import type { Job, JobStatus, QuickUpdateResult, QuickUpdateProposedChanges } from '@landed/shared-types';
+import type {
+  Job,
+  JobStatus,
+  QuickUpdateParser,
+  QuickUpdateProposedChanges,
+  QuickUpdateResult,
+} from '@landed/shared-types';
+import { z } from 'zod';
 
 export interface ParsedIntent {
   intent: 'update_status' | 'add_note' | 'create_job';
-  company: string;
+  company?: string | null;
   title?: string | null;
+  reference?: string | null;
   status?: JobStatus | null;
   notes?: string | null;
   location?: string | null;
   salaryRaw?: string | null;
+  parsedBy?: QuickUpdateParser;
 }
+
+const ParsedIntentSchema = z.object({
+  intent: z.enum(['update_status', 'add_note', 'create_job']),
+  company: z.string().trim().min(1).nullable().optional(),
+  title: z.string().trim().min(1).nullable().optional(),
+  reference: z.string().trim().min(1).nullable().optional(),
+  status: z.enum(['saved', 'applied', 'interview', 'offer', 'rejected']).nullable().optional(),
+  notes: z.string().trim().min(1).nullable().optional(),
+  location: z.string().trim().min(1).nullable().optional(),
+  salaryRaw: z.string().trim().min(1).nullable().optional(),
+}).refine((value) => Boolean(value.company || value.title || value.reference), {
+  message: 'A company, role title, or application reference is required.',
+});
 
 // ── 1. Levenshtein & Token Similarity ─────────────────────────────────────────
 
@@ -89,10 +111,91 @@ export function computeStringSimilarity(a: string, b: string): number {
   return Math.max(jaccard, levScore);
 }
 
+function fieldSimilarity(query: string, field: string): number {
+  const legalSuffixes = new Set(['inc', 'ltd', 'llc', 'corp', 'plc', 'limited', 'incorporated', 'company']);
+  const meaningfulTokens = (value: string) =>
+    cleanString(value)
+      .split(' ')
+      .filter((token) => token.length > 2 && !legalSuffixes.has(token));
+
+  const direct = computeStringSimilarity(query, field);
+  const queryTokens = meaningfulTokens(query);
+  if (queryTokens.length !== 1) return direct;
+
+  const alias = queryTokens[0]!;
+  const tokenBest = meaningfulTokens(field).reduce(
+    (best, token) => Math.max(best, computeStringSimilarity(alias, token)),
+    0,
+  );
+  return Math.max(direct, tokenBest);
+}
+
 function cleanTitleString(title?: string | null): string | null {
   if (!title) return null;
   const cleaned = title.replace(/\s+(?:role|position|job)$/i, '').trim();
   return cleaned || null;
+}
+
+export function extractUrlFromText(text: string): string | null {
+  const match = text.match(/https?:\/\/[^\s<>"']+/i);
+  return match?.[0]?.replace(/[),.;!?]+$/g, '') || null;
+}
+
+const STATUS_RULES: Array<{ status: JobStatus; pattern: RegExp }> = [
+  {
+    status: 'rejected',
+    pattern: /\b(?:reject(?:ed|ion|s)?|denied|declined|turned\s+down|said\s+no|ghosted|did\s*n(?:o|')?t\s+(?:get|make|move))\b/i,
+  },
+  {
+    status: 'offer',
+    pattern: /\b(?:got\s+(?:an?\s+)?)?offers?\b|\bmade\s+(?:me\s+)?an?\s+offer\b|\baccepted\s+(?:the\s+)?offer\b/i,
+  },
+  {
+    status: 'interview',
+    pattern: /\b(?:interviews?|interviewed|interviewing|screening|recruiter\s+call|tech(?:nical)?\s+round|onsite|next\s+round|invit(?:e|ed|es|ing)|got\s+accepted|accepted)\b/i,
+  },
+  {
+    status: 'applied',
+    pattern: /\b(?:appl(?:y|ied)|submitted|sent\s+(?:in\s+)?(?:an?\s+)?(?:application|resume))\b/i,
+  },
+  {
+    status: 'saved',
+    pattern: /\b(?:save[d]?|bookmark(?:ed)?|track(?:ing|ed)?)\b/i,
+  },
+];
+
+export function inferStatusFromText(text: string): JobStatus | null {
+  const haystack = text.replace(/https?:\/\/\S+/gi, ' ');
+  for (const rule of STATUS_RULES) {
+    if (rule.pattern.test(haystack)) return rule.status;
+  }
+  return null;
+}
+
+function leftoverReference(text: string): string | null {
+  const leftover = text
+    .replace(/https?:\/\/\S+/gi, ' ')
+    .replace(
+      /\b(?:reject(?:ed|ion|s)?|denied|declined|turned\s+down|said\s+no|ghosted|offers?|interviews?|interviewed|interviewing|screening|recruiter\s+call|tech(?:nical)?\s+round|onsite|next\s+round|invit(?:e|ed|es|ing)|accepted|accepts?|appl(?:y|ied|ication)|submitted|save[d]?|bookmark(?:ed)?|track(?:ing|ed)?|got|get|have|has|had|was|were|said|i|i'm|im|me|my|they|their|the|a|an|to|for|from|by|at|with|as|please|this|that|new|can|you|on|in|job|role|position|application|scheduled|received|made)\b/gi,
+      ' ',
+    )
+    .replace(/[^\w\s.,&'-]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+  return leftover || null;
+}
+
+function intentFromStatus(
+  status: JobStatus,
+  target: { company?: string | null; title?: string | null; reference?: string | null },
+): ParsedIntent {
+  return {
+    intent: 'update_status',
+    company: target.company ?? null,
+    title: cleanTitleString(target.title),
+    reference: target.reference ? cleanTitleString(target.reference) : null,
+    status,
+  };
 }
 
 // ── 2. Stage 1: Deterministic Fast Parser (<10ms) ──────────────────────────────
@@ -101,69 +204,9 @@ export function parseIntentDeterministic(text: string): ParsedIntent | null {
   const trimmed = text.trim();
   if (!trimmed) return null;
 
-  // Pattern A: Status updates
-  // "Got rejected from Cloudstaff for Frontend Developer role"
-  // "Rejected by Stripe"
-  const rejectedMatch = trimmed.match(
-    /(?:got\s+)?(?:rejected|declined|turned\s+down|did\s+not\s+move\s+forward)\s+(?:from|by|at)\s+(?:the\s+)?([A-Za-z0-9\s._&-]+?)(?:\s+(?:for|as)\s+([A-Za-z0-9\s._&-]+))?$/i
-  );
-  if (rejectedMatch) {
-    return {
-      intent: 'update_status',
-      company: rejectedMatch[1]!.trim(),
-      title: cleanTitleString(rejectedMatch[2]),
-      status: 'rejected',
-    };
-  }
-
-  // "Interview scheduled with Discernis for Frontend Engineer"
-  // "Interview at Vercel"
-  // "Recruiter screening with Anthropic"
-  const interviewMatch = trimmed.match(
-    /(?:interview|screening|recruiter\s+call|tech(?:nical)?\s+round|onsite)\s+(?:scheduled\s+)?(?:with|at|for)\s+(?:the\s+)?([A-Za-z0-9\s._&-]+?)(?:\s+(?:for|as)\s+([A-Za-z0-9\s._&-]+))?$/i
-  );
-  if (interviewMatch) {
-    return {
-      intent: 'update_status',
-      company: interviewMatch[1]!.trim(),
-      title: cleanTitleString(interviewMatch[2]),
-      status: 'interview',
-    };
-  }
-
-  // "Applied to Netflix for Senior Engineer"
-  // "Sent application to Google"
-  const appliedMatch = trimmed.match(
-    /(?:applied|submitted\s+application|sent\s+application)\s+(?:to|at|for)\s+(?:the\s+)?([A-Za-z0-9\s._&-]+?)(?:\s+(?:for|as)\s+([A-Za-z0-9\s._&-]+))?$/i
-  );
-  if (appliedMatch) {
-    return {
-      intent: 'update_status',
-      company: appliedMatch[1]!.trim(),
-      title: cleanTitleString(appliedMatch[2]),
-      status: 'applied',
-    };
-  }
-
-  // "Got offer from Figma"
-  // "Offer received at Stripe"
-  const offerMatch = trimmed.match(
-    /(?:got\s+(?:an\s+)?)?offer\s+(?:from|at|received\s+from)\s+(?:the\s+)?([A-Za-z0-9\s._&-]+?)(?:\s+(?:for|as)\s+([A-Za-z0-9\s._&-]+))?$/i
-  );
-  if (offerMatch) {
-    return {
-      intent: 'update_status',
-      company: offerMatch[1]!.trim(),
-      title: cleanTitleString(offerMatch[2]),
-      status: 'offer',
-    };
-  }
-
-  // Pattern B: Notes update
-  // "Add note for Stripe: Follow up with recruiter on Friday"
-  // "Note for Anthropic: Technical round went well"
+  // Pattern B first: Notes update (colon is unambiguous)
   const noteMatch = trimmed.match(
-    /(?:(?:add\s+)?note\s+(?:for|on|about|to)|notes?\s*[:：])\s*(?:the\s+)?([A-Za-z0-9\s._&-]+?)\s*[:：]\s*(.+)$/i
+    /(?:(?:add\s+)?note\s+(?:for|on|about|to)|notes?\s*[:：])\s*(?:the\s+)?(.+?)\s*[:：]\s*(.+)$/i
   );
   if (noteMatch) {
     return {
@@ -174,31 +217,131 @@ export function parseIntentDeterministic(text: string): ParsedIntent | null {
   }
 
   // Pattern C: Add / Create new role
-  // "Add new job at Vercel: Staff Engineer in Remote"
-  // "Save role at OpenAI: Research Scientist"
   const addMatch = trimmed.match(
-    /(?:save|add|track)\s+(?:new\s+)?(?:job|role|application)?\s*(?:at|for|by)?\s*([A-Za-z0-9\s._&-]+?)\s*[:：]\s*([A-Za-z0-9\s._&-]+)/i
+    /(?:save|add|track)\s+(?:new\s+)?(?:job|role|application)?\s*(?:at|for|by)?\s*(.+?)\s*[:：]\s*(.+)$/i
   );
-  if (addMatch) {
+  if (addMatch && !extractUrlFromText(trimmed)) {
     return {
       intent: 'create_job',
       company: addMatch[1]!.trim(),
       title: cleanTitleString(addMatch[2]),
-      status: 'saved',
+      status: inferStatusFromText(trimmed) || 'saved',
     };
+  }
+
+  const withoutUrl = trimmed.replace(/https?:\/\/\S+/gi, ' ').replace(/\s+/g, ' ').trim();
+
+  // Pattern A: Status updates
+  const transitionMatch = withoutUrl.match(
+    /^(?:move\s+)?(.+?)\s+(?:(?:from\s+)?(?:saved|applied|interview|offer|rejected)\s+)?(?:to|as)\s+(saved|applied|interview|offer|rejected)$/i
+  );
+  if (transitionMatch && !extractUrlFromText(trimmed)) {
+    return {
+      intent: 'update_status',
+      company: transitionMatch[1]!.trim(),
+      status: transitionMatch[2]!.toLowerCase() as JobStatus,
+    };
+  }
+
+  const invitationMatch = withoutUrl.match(
+    /^(.+?)\s+invit(?:e|ed|es|ing)\s+(?:me\s+)?(?:to\s+(?:the\s+)?next\s+round|for\s+(?:an?\s+)?interview).*$/i
+  );
+  if (invitationMatch) {
+    return intentFromStatus('interview', { company: invitationMatch[1]!.trim() });
+  }
+
+  const acceptedMatch = withoutUrl.match(
+    /^(?:i\s+)?(?:got\s+)?accepted\s+(?:at|by|from|for)\s+(?:the\s+)?(.+)$/i
+  );
+  if (acceptedMatch) {
+    return intentFromStatus('interview', { reference: acceptedMatch[1]!.trim() });
+  }
+
+  const saidNoMatch = withoutUrl.match(
+    /^(?:they\s+)?said\s+no\s+(?:at|from|by|for)\s+(?:the\s+)?(.+)$/i
+  );
+  if (saidNoMatch) {
+    return intentFromStatus('rejected', { reference: saidNoMatch[1]!.trim() });
+  }
+
+  // Grammar-tolerant stems: "got reject" should not depend on Gemini.
+  const rejectedForTitleMatch = withoutUrl.match(
+    /^(?:i\s+)?(?:got\s+)?(?:reject(?:ed|ion|s)?|declined|denied|turned\s+down)\s+for\s+(?:the\s+)?(.+?)(?:\s+(?:role|position|job))?$/i
+  );
+  if (rejectedForTitleMatch) {
+    return intentFromStatus('rejected', { reference: rejectedForTitleMatch[1]!.trim() });
+  }
+
+  const rejectedMatch = withoutUrl.match(
+    /(?:i\s+)?(?:got\s+)?(?:reject(?:ed|ion|s)?|declined|denied|turned\s+down|did\s+not\s+move\s+forward)\s+(?:from|by|at)\s+(?:the\s+)?(.+?)(?:\s+(?:for|as)\s+(.+))?$/i
+  );
+  if (rejectedMatch) {
+    return intentFromStatus('rejected', {
+      company: rejectedMatch[1]!.trim(),
+      title: rejectedMatch[2],
+    });
+  }
+
+  const interviewForTitleMatch = withoutUrl.match(
+    /^(?:i\s+(?:have|got)\s+(?:an?\s+)?)?(?:interview(?:s|ed|ing)?|screening|recruiter\s+call|tech(?:nical)?\s+round|onsite)\s+(?:scheduled\s+)?for\s+(?:the\s+)?(.+)$/i
+  );
+  if (interviewForTitleMatch) {
+    return intentFromStatus('interview', { reference: interviewForTitleMatch[1]!.trim() });
+  }
+
+  const interviewMatch = withoutUrl.match(
+    /(?:interview(?:s|ed|ing)?|screening|recruiter\s+call|tech(?:nical)?\s+round|onsite)\s+(?:scheduled\s+)?(?:with|at)\s+(?:the\s+)?(.+?)(?:\s+(?:for|as)\s+(.+))?$/i
+  );
+  if (interviewMatch) {
+    return intentFromStatus('interview', {
+      company: interviewMatch[1]!.trim(),
+      title: interviewMatch[2],
+    });
+  }
+
+  const appliedForTitleMatch = withoutUrl.match(
+    /^(?:i\s+)?(?:appl(?:y|ied)|submitted\s+(?:an?\s+)?application)\s+for\s+(?:the\s+)?(.+)$/i
+  );
+  if (appliedForTitleMatch) {
+    return intentFromStatus('applied', { reference: appliedForTitleMatch[1]!.trim() });
+  }
+
+  const appliedMatch = withoutUrl.match(
+    /(?:appl(?:y|ied)|submitted\s+(?:an?\s+)?application|sent\s+(?:an?\s+)?application)\s+(?:to|at)\s+(?:the\s+)?(.+?)(?:\s+(?:for|as)\s+(.+))?$/i
+  );
+  if (appliedMatch) {
+    return intentFromStatus('applied', {
+      company: appliedMatch[1]!.trim(),
+      title: appliedMatch[2],
+    });
+  }
+
+  const offerMatch = withoutUrl.match(
+    /(?:got\s+(?:an?\s+)?)?offers?\s+(?:from|at|received\s+from)\s+(?:the\s+)?(.+?)(?:\s+(?:for|as)\s+(.+))?$/i
+  );
+  if (offerMatch) {
+    return intentFromStatus('offer', {
+      company: offerMatch[1]!.trim(),
+      title: offerMatch[2],
+    });
+  }
+
+  const status = inferStatusFromText(withoutUrl);
+  const reference = leftoverReference(withoutUrl);
+  if (status && reference && !extractUrlFromText(trimmed)) {
+    return intentFromStatus(status, { reference });
   }
 
   return null;
 }
 
-// ── 3. Stage 2: Gemini 2.5 Flash-Lite LLM Parser (~0.5–2s) ────────────────────
+// ── 3. Stage 2: Gemini Flash-Lite LLM Parser (~0.5–2s) ────────────────────────
 
 export async function parseIntentWithGemini(text: string): Promise<ParsedIntent | null> {
   const apiKey = process.env.GEMINI_API_KEY;
   if (!apiKey || text.trim().length < 3) return null;
 
-  // Use Gemini 2.5 Flash-Lite (or Gemini 1.5/2.0 Flash) with structured JSON response
-  const model = process.env.GEMINI_MODEL || 'gemini-2.5-flash-lite';
+  const model = process.env.GEMINI_MODEL || 'gemini-3.1-flash-lite';
   const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`;
 
   const systemInstruction = `You are a precise job application tracker command parser.
@@ -212,7 +355,7 @@ Valid status values: "saved", "applied", "interview", "offer", "rejected".
 Respond ONLY with a JSON object matching this schema:
 {
   "intent": "update_status" | "add_note" | "create_job",
-  "company": "string (company name)",
+  "company": "company name or null when only the role title is mentioned",
   "title": "string or null",
   "status": "saved" | "applied" | "interview" | "offer" | "rejected" | null,
   "notes": "string or null",
@@ -261,13 +404,18 @@ Respond ONLY with a JSON object matching this schema:
     const rawJson = data.candidates?.[0]?.content?.parts?.[0]?.text;
     if (!rawJson) return null;
 
-    const parsed = JSON.parse(rawJson) as ParsedIntent;
-    if (!parsed.company) return null;
+    const parsedResult = ParsedIntentSchema.safeParse(JSON.parse(rawJson));
+    if (!parsedResult.success) {
+      console.warn('[QuickUpdate] Gemini returned an invalid intent payload.');
+      return null;
+    }
+    const parsed = parsedResult.data;
 
     return {
       intent: parsed.intent || 'update_status',
-      company: parsed.company.trim(),
+      company: parsed.company ? parsed.company.trim() : null,
       title: parsed.title ? parsed.title.trim() : null,
+      reference: parsed.reference ? parsed.reference.trim() : null,
       status: parsed.status || null,
       notes: parsed.notes ? parsed.notes.trim() : null,
       location: parsed.location ? parsed.location.trim() : null,
@@ -284,30 +432,22 @@ Respond ONLY with a JSON object matching this schema:
 export async function parseQuickUpdateText(text: string): Promise<ParsedIntent | null> {
   // Stage 1: Deterministic fast path (<10ms)
   const deterministic = parseIntentDeterministic(text);
-  if (deterministic && deterministic.company && (deterministic.status || deterministic.notes || deterministic.title)) {
-    return deterministic;
+  if (
+    deterministic &&
+    (deterministic.company || deterministic.title || deterministic.reference) &&
+    (deterministic.status || deterministic.notes || deterministic.intent === 'create_job')
+  ) {
+    return { ...deterministic, parsedBy: 'regex' };
   }
 
-  // Stage 2: Gemini 2.5 Flash-Lite LLM fallback (~0.5–2s)
+  // Stage 2: Gemini Flash-Lite LLM fallback (~0.5–2s)
   const geminiResult = await parseIntentWithGemini(text);
-  if (geminiResult && geminiResult.company) {
-    return geminiResult;
+  if (geminiResult && (geminiResult.company || geminiResult.title || geminiResult.reference)) {
+    return { ...geminiResult, parsedBy: 'gemini' };
   }
 
-  // Fallback: If no structured status was detected, extract simple words
-  if (!deterministic) {
-    const words = text.trim().split(/\s+/);
-    if (words.length > 0) {
-      return {
-        intent: 'update_status',
-        company: words[words.length - 1] || text.trim(),
-        title: null,
-        status: null,
-      };
-    }
-  }
-
-  return deterministic;
+  // Do not invent an employer from the last word of an unrecognized sentence.
+  return null;
 }
 
 // ── 5. Weighted Fuzzy Matcher & Decision Engine ────────────────────────────────
@@ -318,24 +458,24 @@ export interface MatchScore {
 }
 
 export function matchJobsWeighted(target: ParsedIntent, userJobs: Job[]): MatchScore[] {
-  if (!target.company || userJobs.length === 0) return [];
-
-  const targetCompany = target.company;
-  const targetTitle = target.title || '';
+  const targetCompany = target.company?.trim() || '';
+  const targetTitle = target.title?.trim() || '';
+  const targetReference = target.reference?.trim() || '';
+  if ((!targetCompany && !targetTitle && !targetReference) || userJobs.length === 0) return [];
 
   const scored = userJobs.map((job) => {
-    const companyScore = computeStringSimilarity(targetCompany, job.company);
-
-    let titleScore = 0;
-    if (targetTitle && job.title) {
-      titleScore = computeStringSimilarity(targetTitle, job.title);
-    } else {
-      // If user did not mention a title (e.g. "Got rejected from Stripe"), neutral title match
-      titleScore = 1.0;
-    }
-
-    // Weighted match: Company carries 65% weight, Title carries 35% weight
-    const totalScore = 0.65 * companyScore + 0.35 * titleScore;
+    const companyScore = targetCompany ? fieldSimilarity(targetCompany, job.company) : 0;
+    const titleScore = targetTitle ? fieldSimilarity(targetTitle, job.title) : 0;
+    const referenceScore = targetReference
+      ? Math.max(fieldSimilarity(targetReference, job.company), fieldSimilarity(targetReference, job.title))
+      : 0;
+    const totalScore = targetReference
+      ? referenceScore
+      : targetCompany && targetTitle
+        ? 0.65 * companyScore + 0.35 * titleScore
+        : targetCompany
+          ? companyScore
+          : titleScore;
 
     return { job, score: totalScore };
   });
@@ -352,25 +492,44 @@ export async function resolveQuickUpdate(
   userJobs: Job[]
 ): Promise<QuickUpdateResult> {
   const parsed = await parseQuickUpdateText(text);
+  const parsedBy = parsed?.parsedBy;
 
-  if (!parsed || !parsed.company) {
+  if (!parsed || (!parsed.company && !parsed.title && !parsed.reference)) {
     return {
       action: 'not_found',
-      message: 'Could not understand the update. Please include a company name (e.g., "Got rejected from Stripe").',
+      message: 'I could not understand that update. Mention a company or role, such as "Got rejected for Junior Android Developer".',
+      parsedBy,
+    };
+  }
+
+  if (parsed.intent === 'update_status' && !parsed.status) {
+    return {
+      action: 'not_found',
+      message: 'I found the role reference, but not the status change. Try "Move OLVRC Inc to rejected".',
+      parsedBy,
     };
   }
 
   const proposedChanges: QuickUpdateProposedChanges = {
-    company: parsed.company,
+    company: parsed.company || undefined,
     title: parsed.title || undefined,
     status: parsed.status || undefined,
-    notes: parsed.notes || undefined,
+    // Status descriptions inferred by Gemini are context, not explicit note requests.
+    notes: parsed.intent === 'add_note' ? parsed.notes || undefined : undefined,
     location: parsed.location || undefined,
     salaryRaw: parsed.salaryRaw || undefined,
   };
 
   // If user explicitly asks to create a new job
   if (parsed.intent === 'create_job') {
+    if (!parsed.company) {
+      return {
+        action: 'not_found',
+        message: 'Please include the company name before creating a new application.',
+        proposedChanges,
+        parsedBy,
+      };
+    }
     return {
       action: 'created',
       message: `Ready to track new role at ${parsed.company}.`,
@@ -378,33 +537,61 @@ export async function resolveQuickUpdate(
         ...proposedChanges,
         status: parsed.status || 'saved',
       },
+      parsedBy,
     };
   }
 
   const matches = matchJobsWeighted(parsed, userJobs);
   const bestMatch = matches[0];
   const secondBest = matches[1];
+  const targetLabel = parsed.company || parsed.title || parsed.reference || 'that role';
 
-  // Case A: High-confidence unique match (Score >= 0.85)
-  if (bestMatch && bestMatch.score >= 0.85) {
-    // If there is a tie or close second candidate (e.g., 2 roles at Google both with company match)
-    if (secondBest && secondBest.score >= 0.80) {
+  // Case A: Unique enough match. 0.80 covers one-letter aliases like "olvro" → OLVRC.
+  if (bestMatch && bestMatch.score >= 0.80) {
+    const tiedWithAnother =
+      Boolean(secondBest) &&
+      secondBest!.score >= 0.80 &&
+      bestMatch.score - secondBest!.score < 0.15;
+
+    if (tiedWithAnother) {
       const candidates = matches.filter((m) => m.score >= 0.70).map((m) => m.job);
       return {
         action: 'disambiguate',
-        message: `We found ${candidates.length} matching roles at ${parsed.company}. Which one would you like to update?`,
+        message: `I found ${candidates.length} matches for "${targetLabel}". Which one should I update?`,
         candidates,
         proposedChanges,
+        parsedBy,
       };
     }
 
-    const statusDesc = parsed.status ? `status to "${parsed.status}"` : 'notes';
-    return {
-      action: 'updated',
-      message: `Updated ${bestMatch.job.title} at ${bestMatch.job.company} ${statusDesc}.`,
-      job: bestMatch.job,
-      proposedChanges,
-    };
+    const ambiguousNearMatch =
+      bestMatch.score < 0.85 &&
+      Boolean(secondBest) &&
+      bestMatch.score - secondBest!.score < 0.20;
+
+    if (!ambiguousNearMatch) {
+      if (
+        parsed.status &&
+        bestMatch.job.status === parsed.status &&
+        !proposedChanges.notes
+      ) {
+        return {
+          action: 'unchanged',
+          message: `${bestMatch.job.title} at ${bestMatch.job.company} is already ${parsed.status}.`,
+          job: bestMatch.job,
+          parsedBy,
+        };
+      }
+
+      const statusDesc = parsed.status ? `status to "${parsed.status}"` : 'notes';
+      return {
+        action: 'updated',
+        message: `Updated ${bestMatch.job.title} at ${bestMatch.job.company} ${statusDesc}.`,
+        job: bestMatch.job,
+        proposedChanges,
+        parsedBy,
+      };
+    }
   }
 
   // Case B: Moderate similarity / Multiple candidate matches (0.50 <= Score < 0.85)
@@ -412,20 +599,22 @@ export async function resolveQuickUpdate(
   if (candidates.length > 0) {
     return {
       action: 'disambiguate',
-      message: `Found ${candidates.length} potential matches for "${parsed.company}". Please select the intended role:`,
+      message: `I found ${candidates.length} potential matches for "${targetLabel}". Which one should I update?`,
       candidates,
       proposedChanges,
+      parsedBy,
     };
   }
 
   // Case C: No match found (< 0.50) -> Offer to create a new application
   return {
     action: 'not_found',
-    message: `No tracked application found for "${parsed.company}". Would you like to create a new entry?`,
+    message: `No tracked application matched "${targetLabel}".`,
     proposedChanges: {
       ...proposedChanges,
       title: parsed.title || 'Job Position',
       status: parsed.status || 'saved',
     },
+    parsedBy,
   };
 }

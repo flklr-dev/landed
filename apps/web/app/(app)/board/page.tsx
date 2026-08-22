@@ -13,7 +13,6 @@ import { Button } from '@/components/ui/Button';
 import { Badge } from '@/components/ui/Badge';
 import { WelcomeModal } from '@/components/features/WelcomeModal';
 import { EmptyBoardState } from '@/components/features/EmptyBoardState';
-import { QuickUpdateModal } from '@/components/features/QuickUpdateModal';
 import { useAuth } from '@/lib/auth-context';
 import { useToast } from '@/lib/toast-context';
 import {
@@ -862,19 +861,6 @@ export default function BoardPage() {
   const [jobToDelete, setJobToDelete] = useState<Job | null>(null);
   const [openedFromDetail, setOpenedFromDetail] = useState<Job | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
-  const [quickUpdateOpen, setQuickUpdateOpen] = useState(false);
-
-  // Global ⌘K / Ctrl+K listener for quick natural-language update
-  useEffect(() => {
-    const handleGlobalKeyDown = (e: KeyboardEvent) => {
-      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k') {
-        e.preventDefault();
-        setQuickUpdateOpen((prev) => !prev);
-      }
-    };
-    window.addEventListener('keydown', handleGlobalKeyDown);
-    return () => window.removeEventListener('keydown', handleGlobalKeyDown);
-  }, []);
 
   useEffect(() => {
     async function loadJobs() {
@@ -890,6 +876,32 @@ export default function BoardPage() {
       }
     }
     loadJobs();
+  }, []);
+
+  useEffect(() => {
+    const handleAssistantJobChange = (event: Event) => {
+      const detail = (event as CustomEvent<{ type: 'updated' | 'created'; job: Job }>).detail;
+      if (!detail?.job) return;
+
+      if (detail.type === 'created') {
+        setJobs((current) =>
+          current.some((job) => job.id === detail.job.id)
+            ? current
+            : [detail.job, ...current]
+        );
+        return;
+      }
+
+      setJobs((current) =>
+        current.map((job) => (job.id === detail.job.id ? detail.job : job))
+      );
+      setSelectedJob((current) =>
+        current?.id === detail.job.id ? detail.job : current
+      );
+    };
+
+    window.addEventListener('landed:job-changed', handleAssistantJobChange);
+    return () => window.removeEventListener('landed:job-changed', handleAssistantJobChange);
   }, []);
 
   useEffect(() => {
@@ -1049,7 +1061,6 @@ export default function BoardPage() {
         }
         showAddButton
         onAddJob={() => setAddJobOpen(true)}
-        onQuickUpdate={() => setQuickUpdateOpen(true)}
       />
 
       {/* Main Content Area */}
@@ -1090,17 +1101,6 @@ export default function BoardPage() {
       )}
 
       <AddJobModal open={addJobOpen} onClose={() => setAddJobOpen(false)} onAddJob={handleAddJob} />
-      <QuickUpdateModal
-        open={quickUpdateOpen}
-        onClose={() => setQuickUpdateOpen(false)}
-        onJobUpdated={(updatedJob) => {
-          setJobs((prev) => prev.map((j) => (j.id === updatedJob.id ? updatedJob : j)));
-          setSelectedJob((prev) => (prev && prev.id === updatedJob.id ? updatedJob : prev));
-        }}
-        onJobCreated={(newJob) => {
-          setJobs((prev) => [newJob, ...prev]);
-        }}
-      />
       <JobDetailModal
         job={selectedJob}
         onClose={() => setSelectedJob(null)}

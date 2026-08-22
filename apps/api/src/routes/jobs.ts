@@ -15,7 +15,7 @@ import { requireAuth } from '../lib/auth.js';
 import { validate } from '../lib/validate.js';
 import { enqueueExtraction, enqueueMatchScoring } from '../lib/queue.js';
 import { extractJobDetails } from '../lib/job-extractor.js';
-import { resolveQuickUpdate } from '../lib/quick-update.js';
+import { resolveQuickUpdate, extractUrlFromText, inferStatusFromText } from '../lib/quick-update.js';
 import { userRateLimit } from '../lib/rate-limit.js';
 
 export const jobsRouter = Router();
@@ -26,7 +26,7 @@ jobsRouter.use(requireAuth);
 // ── Schemas ──────────────────────────────────────────────────────────────────
 
 const QuickUpdateSchema = z.object({
-  text: z.string().trim().max(500).optional(),
+  text: z.string().trim().max(2200).optional(),
   confirmedJobId: z.string().optional(),
   proposedChanges: z.object({
     company: z.string().trim().max(150).optional(),
@@ -224,6 +224,19 @@ jobsRouter.post('/quick-update', userRateLimit(20, 60_000), validate('body', Qui
       }
 
       const newStatus = proposedChanges?.status;
+      if (
+        newStatus &&
+        existing.status === newStatus &&
+        !proposedChanges?.notes
+      ) {
+        res.json({
+          action: 'unchanged',
+          message: `${existing.title} at ${existing.company} is already ${newStatus}.`,
+          job: existing,
+        });
+        return;
+      }
+
       const appliedAt = newStatus === 'applied' && existing.status !== 'applied'
         ? new Date()
         : undefined;
@@ -252,10 +265,55 @@ jobsRouter.post('/quick-update', userRateLimit(20, 60_000), validate('body', Qui
       return;
     }
 
-    // Case 2: Natural-language text resolution
     if (!text) {
       res.status(400).json({ error: 'Please provide a text update (e.g. "Got rejected from Stripe").' });
       return;
+    }
+
+    const jobUrl = extractUrlFromText(text);
+    if (jobUrl) {
+      try {
+        const details = await extractJobDetails(jobUrl);
+        const status = inferStatusFromText(text) ?? 'saved';
+
+        const job = await prisma.job.create({
+          data: {
+            company: details.company,
+            title: details.title,
+            location: details.location ?? undefined,
+            salaryRaw: details.salaryRaw ?? undefined,
+            remoteType: details.remoteType ?? undefined,
+            jobType: details.jobType ?? undefined,
+            experienceLevel: details.experienceLevel ?? undefined,
+            requiredSkills: details.requiredSkills,
+            description: details.description ?? undefined,
+            status,
+            sourceUrl: jobUrl,
+            user: { connect: { id: userId } },
+            extractionStatus: 'done',
+            appliedAt: status === 'applied' ? new Date() : undefined,
+          },
+        });
+
+        const hasResume = await prisma.resume.findFirst({
+          where: { userId, extractionStatus: 'done' },
+        });
+        if (hasResume) {
+          await enqueueMatchScoring(userId, job.id);
+        }
+
+        res.json({
+          action: 'created',
+          message: `Extracted and added ${job.title} at ${job.company} as ${job.status}.`,
+          job,
+          parsedBy: 'regex',
+        });
+        return;
+      } catch (err) {
+        const message = err instanceof Error ? err.message : 'Unable to extract job details from URL.';
+        res.status(422).json({ error: message });
+        return;
+      }
     }
 
     // Fetch user's current tracked jobs
