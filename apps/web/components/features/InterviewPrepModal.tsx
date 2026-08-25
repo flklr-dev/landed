@@ -151,7 +151,7 @@ export function InterviewPrepModal({
             </div>
 
             <span className="font-mono text-xs font-bold text-signal px-2.5 py-0.5 rounded-full bg-signal/10 border border-signal/30">
-              {score}% Match
+              {score}% Resume Alignment
             </span>
           </div>
 

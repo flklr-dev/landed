@@ -12,6 +12,7 @@ export interface ParsedJob {
   jobType?: JobType | null;
   experienceLevel?: string | null;
   requiredSkills?: string[];
+  preferredSkills?: string[];
   description?: string | null;
 }
 
@@ -171,6 +172,17 @@ export function extractSkillsHeuristically(text: string): string[] {
   }
 
   return [...matched].slice(0, 20);
+}
+
+function extractPreferredSkillsHeuristically(text: string): string[] {
+  if (!text) return [];
+  const preferredContext = text
+    .split(/(?<=[.!?;])\s+/)
+    .filter((segment) =>
+      /\b(preferred|nice[\s-]to[\s-]have|bonus|plus|advantage|ideally|optional)\b/i.test(segment)
+    )
+    .join(' ');
+  return extractSkillsHeuristically(preferredContext).slice(0, 10);
 }
 
 function splitSkills(value: unknown): string[] {
@@ -355,7 +367,11 @@ function candidateFromJobPosting(posting: Record<string, unknown>): ParsedJob {
     ? 'Remote'
     : readAddress(posting.jobLocation) || readAddress(posting.applicantLocationRequirements);
   const explicitSkills = splitSkills(posting.skills);
-  const requiredSkills = [...new Set([...explicitSkills, ...extractSkillsHeuristically(description)])].slice(0, 20);
+  const preferredSkills = extractPreferredSkillsHeuristically(description);
+  const preferredSet = new Set(preferredSkills);
+  const requiredSkills = [...new Set([...explicitSkills, ...extractSkillsHeuristically(description)])]
+    .filter((skill) => !preferredSet.has(skill))
+    .slice(0, 12);
 
   return {
     title,
@@ -366,6 +382,7 @@ function candidateFromJobPosting(posting: Record<string, unknown>): ParsedJob {
     jobType: inferJobType(posting.employmentType),
     experienceLevel: inferExperienceLevel(`${normalizeText(posting.experienceRequirements)} ${description.slice(0, 1500)}`),
     requiredSkills,
+    preferredSkills,
     description: description.slice(0, 4000) || null,
   };
 }
@@ -472,7 +489,10 @@ function extractMetaCandidate($: cheerio.CheerioAPI, url: string): ParsedJob {
     remoteType: inferRemoteType(`${title} ${location || ''} ${description}`),
     jobType: inferJobType(description),
     experienceLevel: inferExperienceLevel(description),
-    requiredSkills: extractSkillsHeuristically(description),
+    requiredSkills: extractSkillsHeuristically(description).filter(
+      (skill) => !extractPreferredSkillsHeuristically(description).includes(skill)
+    ).slice(0, 12),
+    preferredSkills: extractPreferredSkillsHeuristically(description),
     description: description.slice(0, 1000) || null,
   };
 }
@@ -480,13 +500,18 @@ function extractMetaCandidate($: cheerio.CheerioAPI, url: string): ParsedJob {
 function candidateFromBody(cleanText: string): ParsedJob {
   const remoteType = inferRemoteType(cleanText);
   const labeledLocation = cleanText.match(/\b(?:job\s+location|work\s+location|location)\s*[:：]\s*([^|•\n]{2,80})/i)?.[1];
+  const preferredSkills = extractPreferredSkillsHeuristically(cleanText);
+  const preferredSet = new Set(preferredSkills);
   return {
     location: firstString(labeledLocation, remoteType === 'remote' ? 'Remote' : null),
     salaryRaw: extractSalaryFromText(cleanText),
     remoteType,
     jobType: inferJobType(cleanText),
     experienceLevel: inferExperienceLevel(cleanText),
-    requiredSkills: extractSkillsHeuristically(cleanText),
+    requiredSkills: extractSkillsHeuristically(cleanText)
+      .filter((skill) => !preferredSet.has(skill))
+      .slice(0, 12),
+    preferredSkills,
   };
 }
 
@@ -542,9 +567,10 @@ export function extractFromUrlSlug(url: string): ParsedJob {
       remoteType: inferRemoteType(title),
       jobType: inferJobType(title),
       requiredSkills: [],
+      preferredSkills: [],
     };
   } catch {
-    return { requiredSkills: [] };
+    return { requiredSkills: [], preferredSkills: [] };
   }
 }
 
@@ -554,8 +580,8 @@ function meaningful(value: unknown): boolean {
 
 export function mergeJobCandidates(candidates: ParsedJob[], url: string): ParsedJob {
   const host = hostFor(url);
-  const merged: ParsedJob = { requiredSkills: [] };
-  const scalarFields: Array<keyof Omit<ParsedJob, 'requiredSkills'>> = [
+  const merged: ParsedJob = { requiredSkills: [], preferredSkills: [] };
+  const scalarFields: Array<keyof Omit<ParsedJob, 'requiredSkills' | 'preferredSkills'>> = [
     'company',
     'title',
     'location',
@@ -579,7 +605,14 @@ export function mergeJobCandidates(candidates: ParsedJob[], url: string): Parsed
   merged.company = company && !isPlatformCompany(company, host) ? company : null;
   merged.title = normalizeText(merged.title) || null;
   if (merged.remoteType === 'remote' && !meaningful(merged.location)) merged.location = 'Remote';
-  merged.requiredSkills = [...new Set(candidates.flatMap((candidate) => candidate.requiredSkills || []))].slice(0, 20);
+  const preferredSkills = [...new Set(
+    candidates.flatMap((candidate) => candidate.preferredSkills || [])
+  )].slice(0, 10);
+  const preferredSet = new Set(preferredSkills);
+  merged.requiredSkills = [...new Set(
+    candidates.flatMap((candidate) => candidate.requiredSkills || [])
+  )].filter((skill) => !preferredSet.has(skill)).slice(0, 12);
+  merged.preferredSkills = preferredSkills;
   return merged;
 }
 

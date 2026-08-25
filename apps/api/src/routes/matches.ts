@@ -16,7 +16,11 @@ import {
   parseResume,
   normalizeSkill,
 } from '../lib/resume-parser.js';
-import { computeMatchesForUser, computeMatchForSingleJob } from '../lib/matching-engine.js';
+import {
+  computeMatchesForUser,
+  computeMatchForSingleJob,
+  SCORING_VERSION,
+} from '../lib/matching-engine.js';
 import { explainJobMatch } from '../lib/match-explainer.js';
 
 export const matchesRouter = Router();
@@ -224,11 +228,15 @@ matchesRouter.get('/', async (req, res) => {
       },
     });
 
-    // Auto-compute scores on-the-fly for any newly added jobs missing a matchScore
-    const uncomputedJobs = jobsWithScores.filter((job) => !job.matches || job.matches.length === 0);
-    if (uncomputedJobs.length > 0) {
+    // Auto-compute missing or legacy scores so deployments migrate existing
+    // rankings without requiring an offline backfill.
+    const staleJobs = jobsWithScores.filter((job) => {
+      const match = job.matches?.[0];
+      return !match || match.scoringVersion !== SCORING_VERSION;
+    });
+    if (staleJobs.length > 0) {
       await Promise.all(
-        uncomputedJobs.map(async (job) => {
+        staleJobs.map(async (job) => {
           await computeMatchForSingleJob(userId, job.id);
         })
       );

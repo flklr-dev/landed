@@ -30,6 +30,7 @@ export const ExtractionResultSchema = z.object({
   jobType: z.enum(['full-time', 'part-time', 'contract', 'freelance', 'internship']).nullable().optional(),
   experienceLevel: z.string().nullable().optional(),
   requiredSkills: z.array(z.string()).default([]),
+  preferredSkills: z.array(z.string()).default([]),
   description: z.string().nullable().optional(),
 });
 
@@ -107,13 +108,15 @@ Return a JSON object with these fields:
 - remoteType: "remote" | "hybrid" | "onsite" | null
 - jobType: "full-time" | "part-time" | "contract" | "freelance" | "internship" | null
 - experienceLevel: string | null (e.g. "Senior", "Mid-Senior", "Entry Level", "Lead")
-- requiredSkills: string[] (list of specific skills, technologies, or qualifications mentioned)
+- requiredSkills: string[] (explicit must-have skills, technologies, or qualifications)
+- preferredSkills: string[] (skills described as preferred, optional, a bonus, or nice-to-have)
 - description: string | null (a concise 2-3 sentence summary of the role — NOT the full posting)
 
 Rules:
 - Extract exactly what's stated — do not infer or make up missing fields.
 - If a field is not mentioned in the posting, set it to null.
-- For requiredSkills, extract specific technical skills and tools, not soft skills.
+- Extract specific technical skills and tools, not generic soft skills.
+- Never put preferred, optional, bonus, or nice-to-have skills in requiredSkills.
 - Keep the description to a brief summary, not the entire posting text.`;
 
   const response = await callLLM({

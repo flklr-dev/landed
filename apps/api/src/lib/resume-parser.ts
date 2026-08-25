@@ -7,6 +7,12 @@
 import { z } from 'zod';
 import * as pdfModule from 'pdf-parse';
 import mammoth from 'mammoth';
+import {
+  SKILL_ALIASES,
+  normalizeSkill,
+} from '@landed/shared-types';
+
+export { normalizeSkill } from '@landed/shared-types';
 
 export const ParsedResumeSchema = z.object({
   skills: z.array(z.string()).default([]),
@@ -16,135 +22,6 @@ export const ParsedResumeSchema = z.object({
 });
 
 export type ParsedResume = z.infer<typeof ParsedResumeSchema>;
-
-// ── Canonical Skill Normalization Dictionary ─────────────────────────────────
-
-const SKILL_MAP: Record<string, string> = {
-  // Languages
-  typescript: 'TypeScript',
-  ts: 'TypeScript',
-  javascript: 'JavaScript',
-  js: 'JavaScript',
-  python: 'Python',
-  py: 'Python',
-  golang: 'Go',
-  go: 'Go',
-  java: 'Java',
-  csharp: 'C#',
-  'c#': 'C#',
-  cpp: 'C++',
-  'c++': 'C++',
-  ruby: 'Ruby',
-  php: 'PHP',
-  rust: 'Rust',
-  swift: 'Swift',
-  kotlin: 'Kotlin',
-  sql: 'SQL',
-  html: 'HTML',
-  html5: 'HTML5',
-  css: 'CSS',
-  css3: 'CSS3',
-
-  // Frontend & UI
-  react: 'React',
-  'react.js': 'React',
-  reactjs: 'React',
-  'next.js': 'Next.js',
-  nextjs: 'Next.js',
-  vue: 'Vue.js',
-  'vue.js': 'Vue.js',
-  vuejs: 'Vue.js',
-  angular: 'Angular',
-  svelte: 'Svelte',
-  'svelte.js': 'Svelte',
-  'tailwind css': 'Tailwind CSS',
-  tailwind: 'Tailwind CSS',
-  tailwindcss: 'Tailwind CSS',
-  redux: 'Redux',
-  zustand: 'Zustand',
-  graphql: 'GraphQL',
-  webpack: 'Webpack',
-  vite: 'Vite',
-
-  // Backend & APIs
-  'node.js': 'Node.js',
-  nodejs: 'Node.js',
-  node: 'Node.js',
-  express: 'Express',
-  'express.js': 'Express',
-  nestjs: 'NestJS',
-  fastify: 'Fastify',
-  django: 'Django',
-  flask: 'Flask',
-  fastapi: 'FastAPI',
-  'spring boot': 'Spring Boot',
-  spring: 'Spring Boot',
-  laravel: 'Laravel',
-  'ruby on rails': 'Ruby on Rails',
-  rails: 'Ruby on Rails',
-  grpc: 'gRPC',
-  rest: 'REST APIs',
-  'rest api': 'REST APIs',
-  'restful apis': 'REST APIs',
-
-  // Databases & Caching
-  postgresql: 'PostgreSQL',
-  postgres: 'PostgreSQL',
-  psql: 'PostgreSQL',
-  mysql: 'MySQL',
-  mongodb: 'MongoDB',
-  mongo: 'MongoDB',
-  redis: 'Redis',
-  sqlite: 'SQLite',
-  dynamodb: 'DynamoDB',
-  elasticsearch: 'Elasticsearch',
-  prisma: 'Prisma',
-  drizzle: 'Drizzle ORM',
-  typeorm: 'TypeORM',
-
-  // Cloud & DevOps
-  aws: 'AWS',
-  'amazon web services': 'AWS',
-  gcp: 'GCP',
-  'google cloud': 'GCP',
-  azure: 'Azure',
-  docker: 'Docker',
-  kubernetes: 'Kubernetes',
-  k8s: 'Kubernetes',
-  terraform: 'Terraform',
-  ansible: 'Ansible',
-  'ci/cd': 'CI/CD',
-  cicd: 'CI/CD',
-  'github actions': 'GitHub Actions',
-  gitlab: 'GitLab CI',
-  linux: 'Linux',
-  nginx: 'Nginx',
-
-  // Architecture & AI
-  microservices: 'Microservices',
-  'event-driven': 'Event-Driven Architecture',
-  rag: 'RAG',
-  llm: 'LLM',
-  openai: 'OpenAI API',
-  gemini: 'Gemini API',
-  langchain: 'LangChain',
-  llamaindex: 'LlamaIndex',
-  pinecone: 'Pinecone',
-  weaviate: 'Weaviate',
-  pgvector: 'pgvector',
-
-  // Tools & Methodologies
-  git: 'Git',
-  github: 'GitHub',
-  jira: 'Jira',
-  agile: 'Agile',
-  scrum: 'Scrum',
-  jest: 'Jest',
-  playwright: 'Playwright',
-  cypress: 'Cypress',
-  vitest: 'Vitest',
-  figma: 'Figma',
-};
 
 // ── Common Target Roles ──────────────────────────────────────────────────────
 
@@ -179,27 +56,6 @@ const COMMON_ROLES = [
   'QA Engineer',
   'Solutions Architect',
 ];
-
-/**
- * Normalizes a raw skill string to its canonical industry name.
- */
-export function normalizeSkill(rawSkill: string): string {
-  const cleaned = rawSkill
-    .trim()
-    .toLowerCase()
-    .replace(/[^\w\s#+.-]/g, '');
-
-  if (SKILL_MAP[cleaned]) {
-    return SKILL_MAP[cleaned]!;
-  }
-
-  // Title-case fallback for non-mapped multi-word skills
-  return rawSkill
-    .trim()
-    .split(/\s+/)
-    .map((word) => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
-    .join(' ');
-}
 
 /**
  * Extracts raw textual content from uploaded file buffers (PDF, DOCX, TXT).
@@ -269,7 +125,7 @@ export function parseResumeDeterministically(text: string): ParsedResume {
   const detectedSkills = new Set<string>();
 
   // 1. Scan for all dictionary skills
-  for (const [key, canonical] of Object.entries(SKILL_MAP)) {
+  for (const [key, canonical] of Object.entries(SKILL_ALIASES)) {
     // Word boundary check
     const escaped = key.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
     const regex = new RegExp(`(?:^|[^a-zA-Z0-9#+.-])${escaped}(?:$|[^a-zA-Z0-9#+.-])`, 'i');
@@ -338,7 +194,9 @@ export function parseResumeDeterministically(text: string): ParsedResume {
   return {
     skills: Array.from(detectedSkills),
     roles: Array.from(detectedRoles).slice(0, 3),
-    yearsOfExperience: yearsOfExperience ?? (detectedSkills.size > 8 ? 4 : 2),
+    // Unknown experience is intentionally preserved instead of fabricating a
+    // value from skill count. The scorer renormalizes around unknown evidence.
+    yearsOfExperience,
     summary: summary || (detectedSkills.size > 0 ? `Experienced professional skilled in ${Array.from(detectedSkills).slice(0, 4).join(', ')}.` : null),
   };
 }

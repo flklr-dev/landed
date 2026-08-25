@@ -5,6 +5,26 @@
 // map directly to these types.
 // ─────────────────────────────────────────────────────────────────────────────
 
+export {
+  SKILL_ALIASES,
+  normalizeSkill,
+  normalizeSkills,
+  skillEvidenceCredit,
+  isGenericSoftSkill,
+  partitionJobSkills,
+  skillsForScoring,
+} from './skills.js';
+export {
+  SCORING_VERSION,
+  calculateJobMatch,
+} from './matching.js';
+export type {
+  MatchCalculationResult,
+  MatchConfidence,
+  MatchJobInput,
+  MatchResumeInput,
+} from './matching.js';
+
 // ── Enums ────────────────────────────────────────────────────────────────────
 
 export type JobStatus = 'saved' | 'applied' | 'interview' | 'offer' | 'rejected';
@@ -46,6 +66,7 @@ export interface Job {
   jobType?: JobType;
   experienceLevel?: string; // e.g. "Senior", "Mid", "Entry Level"
   requiredSkills: string[];
+  preferredSkills?: string[];
   description?: string;
 
   // Application state
@@ -92,6 +113,13 @@ export interface MatchScore {
   explanation?: string; // AI-generated, on-demand (premium)
   matchedSkills: string[];
   missingSkills: string[];
+  transferableSkills?: string[];
+  skillScore?: number;
+  preferredSkillScore?: number;
+  roleScore?: number;
+  experienceScore?: number;
+  confidence?: 'high' | 'medium' | 'low';
+  scoringVersion?: string;
   computedAt: string; // ISO 8601
 }
 

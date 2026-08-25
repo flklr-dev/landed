@@ -173,6 +173,7 @@ export async function extractJobLive(url: string): Promise<{
     jobType?: 'full-time' | 'part-time' | 'contract' | 'freelance' | 'internship' | null;
     experienceLevel?: string | null;
     requiredSkills: string[];
+    preferredSkills: string[];
     description?: string | null;
     sourceUrl: string;
   };

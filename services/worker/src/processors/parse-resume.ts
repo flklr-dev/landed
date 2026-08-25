@@ -5,6 +5,7 @@
 // ─────────────────────────────────────────────────────────────────────────────
 
 import { prisma } from '@landed/db';
+import { calculateJobMatch, normalizeSkills } from '@landed/shared-types';
 import { parseResumeText } from '../lib/llm.js';
 import { generateEmbedding } from '../lib/embeddings.js';
 
@@ -58,13 +59,14 @@ export async function processResumeParse(data: ParseResumeData): Promise<void> {
 
     // 2. Send to Grok 4.1 for structured parsing
     const parsed = await parseResumeText(resumeText);
+    const normalizedSkills = normalizeSkills(parsed.skills);
     console.log(`[Resume] Parsed ${parsed.skills.length} skills, ${parsed.roles.length} roles`);
 
     // 3. Update the resume record with parsed data
     await prisma.resume.update({
       where: { id: resumeId },
       data: {
-        parsedSkills: parsed.skills,
+        parsedSkills: normalizedSkills,
         parsedRoles: parsed.roles,
         yearsOfExperience: parsed.yearsOfExperience ?? null,
         extractionStatus: 'done',
@@ -74,7 +76,7 @@ export async function processResumeParse(data: ParseResumeData): Promise<void> {
     // 4. Compute embedding for the resume
     const embeddingText = [
       parsed.roles.join(', '),
-      parsed.skills.join(', '),
+      normalizedSkills.join(', '),
       parsed.summary ?? '',
     ].filter(Boolean).join(' — ');
 
@@ -117,84 +119,81 @@ export async function processResumeParse(data: ParseResumeData): Promise<void> {
 }
 
 // ── Match scoring ────────────────────────────────────────────────────────────
-// Computes cosine similarity between resume and all job embeddings using
-// pgvector's <=> operator directly in SQL.
+// Uses the same shared, versioned evidence scorer as the synchronous API path.
+// Embeddings remain available for future ranking experiments but never silently
+// overwrite the production score with a different formula.
 
 export async function computeMatchScores(userId: string, specificJobId?: string): Promise<void> {
   console.log(`[Match] Computing scores for user ${userId}`);
 
   try {
-    // Get resume embedding via raw SQL
-    const resumeRows = await prisma.$queryRawUnsafe<Array<{ id: string; embedding: string }>>(
-      `SELECT id, embedding::text FROM resumes WHERE user_id = $1 AND extraction_status = 'done' LIMIT 1`,
-      userId,
-    );
-
-    if (resumeRows.length === 0) {
+    const resume = await prisma.resume.findFirst({
+      where: { userId, extractionStatus: 'done' },
+      orderBy: { uploadedAt: 'desc' },
+    });
+    if (!resume) {
       console.log('[Match] No parsed resume found — skipping');
       return;
     }
 
-    const resumeEmbedding = resumeRows[0]!.embedding;
-
-    // Compute cosine similarity for all (or one specific) job(s)
-    // pgvector's <=> operator returns cosine distance (1 - similarity),
-    // so we convert: score = (1 - distance) * 100
-    const jobFilter = specificJobId ? `AND j.id = $2` : '';
-    const params = specificJobId ? [userId, specificJobId, resumeEmbedding] : [userId, resumeEmbedding];
-    const embeddingParamIdx = specificJobId ? 3 : 2;
-
-    const matchRows = await prisma.$queryRawUnsafe<Array<{
-      job_id: string;
-      score: number;
-      required_skills: string[];
-    }>>(
-      `SELECT j.id as job_id, 
-              ROUND(((1 - (j.embedding <=> $${embeddingParamIdx}::vector)) * 100)::numeric, 1) as score,
-              j.required_skills
-       FROM jobs j 
-       WHERE j.user_id = $1 
-         AND j.embedding IS NOT NULL
-         ${jobFilter}
-       ORDER BY j.embedding <=> $${embeddingParamIdx}::vector ASC`,
-      ...params,
-    );
-
-    console.log(`[Match] Computed ${matchRows.length} match scores`);
-
-    // Get resume skills for comparison
-    const resume = await prisma.resume.findFirst({
-      where: { userId, extractionStatus: 'done' },
-      select: { parsedSkills: true },
+    const jobs = await prisma.job.findMany({
+      where: {
+        userId,
+        ...(specificJobId ? { id: specificJobId } : {}),
+      },
     });
+    console.log(`[Match] Computing ${jobs.length} evidence scores`);
 
-    const resumeSkills = new Set((resume?.parsedSkills ?? []).map(s => s.toLowerCase()));
-
-    // Upsert match scores
-    for (const row of matchRows) {
-      const jobSkills = row.required_skills ?? [];
-      const matchedSkills = jobSkills.filter(s => resumeSkills.has(s.toLowerCase()));
-      const missingSkills = jobSkills.filter(s => !resumeSkills.has(s.toLowerCase()));
+    const candidateSkills = normalizeSkills(resume.parsedSkills);
+    for (const job of jobs) {
+      const match = calculateJobMatch(
+        {
+          parsedSkills: candidateSkills,
+          parsedRoles: resume.parsedRoles,
+          yearsOfExperience: resume.yearsOfExperience,
+        },
+        {
+          requiredSkills: job.requiredSkills,
+          preferredSkills: job.preferredSkills,
+          title: job.title,
+          description: job.description,
+          experienceLevel: job.experienceLevel,
+        }
+      );
 
       await prisma.matchScore.upsert({
-        where: { userId_jobId: { userId, jobId: row.job_id } },
+        where: { userId_jobId: { userId, jobId: job.id } },
         create: {
           userId,
-          jobId: row.job_id,
-          score: Number(row.score),
-          matchedSkills,
-          missingSkills,
+          jobId: job.id,
+          score: match.score,
+          matchedSkills: match.matchedSkills,
+          missingSkills: match.missingSkills,
+          transferableSkills: match.transferableSkills,
+          skillScore: match.skillScore,
+          preferredSkillScore: match.preferredSkillScore,
+          roleScore: match.roleScore,
+          experienceScore: match.experienceScore,
+          confidence: match.confidence,
+          scoringVersion: match.scoringVersion,
         },
         update: {
-          score: Number(row.score),
-          matchedSkills,
-          missingSkills,
+          score: match.score,
+          matchedSkills: match.matchedSkills,
+          missingSkills: match.missingSkills,
+          transferableSkills: match.transferableSkills,
+          skillScore: match.skillScore,
+          preferredSkillScore: match.preferredSkillScore,
+          roleScore: match.roleScore,
+          experienceScore: match.experienceScore,
+          confidence: match.confidence,
+          scoringVersion: match.scoringVersion,
           computedAt: new Date(),
         },
       });
     }
 
-    console.log(`[Match] ✓ Updated ${matchRows.length} match scores for user ${userId}`);
+    console.log(`[Match] ✓ Updated ${jobs.length} match scores for user ${userId}`);
 
   } catch (err) {
     console.error(`[Match] ✗ Failed scoring for user ${userId}:`, err);

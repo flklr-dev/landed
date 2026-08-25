@@ -198,7 +198,7 @@ export default function MatchesPage() {
                     Upload Your Resume to Unlock Match Rankings
                   </h2>
                   <p className="text-xs text-ink-muted leading-relaxed">
-                    Upload your resume (PDF, DOCX, or paste text) to automatically rank all your tracked applications by compatibility score and detect skill gaps.
+                    Upload your resume (PDF, DOCX, or paste text) to rank tracked applications by resume evidence, related skills, role alignment, and experience.
                   </p>
                 </div>
 
@@ -380,7 +380,7 @@ export default function MatchesPage() {
                   </div>
                   <div className="bg-bg/60 border border-line/60 rounded-lg p-3">
                     <p className="text-[9px] font-mono text-ink-muted/70 uppercase tracking-wider font-bold">
-                      Avg Compatibility
+                      Avg Alignment
                     </p>
                     <p className="text-lg font-mono font-bold text-signal mt-0.5">
                       {avgScore}%
@@ -454,7 +454,7 @@ export default function MatchesPage() {
                   </div>
                   <h4 className="text-sm font-bold text-ink">No Active Applications Tracked Yet</h4>
                   <p className="text-xs text-ink-muted max-w-sm mx-auto">
-                    Add active job postings (Saved, Applied, or Interviewing) to your board to see live fit scores and match breakdowns.
+                    Add active job postings (Saved, Applied, or Interviewing) to your board to see resume-alignment scores and evidence breakdowns.
                   </p>
                   <Link href="/board">
                     <Button size="sm" className="bg-signal text-ink font-semibold text-xs font-mono mt-2">
@@ -518,7 +518,7 @@ export default function MatchesPage() {
         onClose={() => setDeleteModalOpen(false)}
         onConfirm={handleConfirmDelete}
         title="Remove Active Resume?"
-        description="This will permanently remove your uploaded resume, parsed skills on file, and clear all calculated job compatibility rankings."
+        description="This will permanently remove your uploaded resume, parsed skills on file, and clear all calculated resume-alignment rankings."
         confirmText="Remove Resume"
         cancelText="Keep Resume"
         variant="danger"

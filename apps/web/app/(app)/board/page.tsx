@@ -101,6 +101,7 @@ function AddJobModal({
   const [experienceLevel, setExperienceLevel] = useState<string>('');
   const [status, setStatus] = useState<JobStatus>('saved');
   const [skillsInput, setSkillsInput] = useState<string>('');
+  const [preferredSkillsInput, setPreferredSkillsInput] = useState<string>('');
   const [notes, setNotes] = useState('');
   const formSessionRef = useRef(0);
 
@@ -120,6 +121,7 @@ function AddJobModal({
     setExperienceLevel('');
     setStatus('saved');
     setSkillsInput('');
+    setPreferredSkillsInput('');
     setNotes('');
   };
 
@@ -152,6 +154,9 @@ function AddJobModal({
         if (d.experienceLevel) setExperienceLevel(d.experienceLevel);
         if (d.requiredSkills && d.requiredSkills.length > 0) {
           setSkillsInput(d.requiredSkills.join(', '));
+        }
+        if (d.preferredSkills && d.preferredSkills.length > 0) {
+          setPreferredSkillsInput(d.preferredSkills.join(', '));
         }
         if (d.salaryRaw) {
           const parsedSalary = splitSalaryRaw(d.salaryRaw);
@@ -186,6 +191,9 @@ function AddJobModal({
     const parsedSkills = skillsInput
       ? skillsInput.split(',').map((s) => s.trim()).filter(Boolean)
       : [];
+    const parsedPreferredSkills = preferredSkillsInput
+      ? preferredSkillsInput.split(',').map((s) => s.trim()).filter(Boolean)
+      : [];
 
     let formattedSalary: string | undefined = undefined;
     if (salary.trim()) {
@@ -203,6 +211,7 @@ function AddJobModal({
         jobType: (jobType || undefined) as Job['jobType'] | undefined,
         experienceLevel: experienceLevel.trim() || undefined,
         requiredSkills: parsedSkills,
+        preferredSkills: parsedPreferredSkills,
         status: status || 'saved',
         notes: notes.trim() || undefined,
         sourceUrl: url.trim() || undefined,
@@ -403,7 +412,7 @@ function AddJobModal({
             </div>
           </div>
 
-          {/* Row 4: Skills & Posting URL */}
+          {/* Row 4: Required and preferred evidence */}
           <div className="grid grid-cols-2 gap-3">
             <Input
               label="Required Skills"
@@ -411,6 +420,17 @@ function AddJobModal({
               value={skillsInput}
               onChange={(e) => setSkillsInput(e.target.value)}
             />
+            <Input
+              label="Preferred Skills"
+              placeholder="GraphQL, Kubernetes"
+              value={preferredSkillsInput}
+              onChange={(e) => setPreferredSkillsInput(e.target.value)}
+              hint="Optional or nice-to-have."
+            />
+          </div>
+
+          {/* Row 5: Source URL */}
+          <div>
             <Input
               label="Job Posting URL"
               placeholder="https://..."
@@ -420,7 +440,7 @@ function AddJobModal({
             />
           </div>
 
-          {/* Row 5: Notes */}
+          {/* Row 6: Notes */}
           <Textarea
             label="Notes"
             placeholder="Any notes about this role…"
@@ -466,6 +486,7 @@ function JobDetailModal({
   const [experienceLevel, setExperienceLevel] = useState('');
   const [status, setStatus] = useState<JobStatus>('saved');
   const [skillsInput, setSkillsInput] = useState('');
+  const [preferredSkillsInput, setPreferredSkillsInput] = useState('');
   const [notes, setNotes] = useState('');
   const [sourceUrl, setSourceUrl] = useState('');
 
@@ -485,6 +506,7 @@ function JobDetailModal({
       setExperienceLevel(job.experienceLevel || '');
       setStatus(job.status || 'saved');
       setSkillsInput(job.requiredSkills ? job.requiredSkills.join(', ') : '');
+      setPreferredSkillsInput(job.preferredSkills ? job.preferredSkills.join(', ') : '');
       setNotes(job.notes || '');
       setSourceUrl(job.sourceUrl || '');
       setIsEditing(false);
@@ -520,6 +542,9 @@ function JobDetailModal({
     const parsedSkills = skillsInput
       ? skillsInput.split(',').map((s) => s.trim()).filter(Boolean)
       : [];
+    const parsedPreferredSkills = preferredSkillsInput
+      ? preferredSkillsInput.split(',').map((s) => s.trim()).filter(Boolean)
+      : [];
 
     const formattedSalary = salary.trim()
       ? `${currency}${salary.trim()}`
@@ -536,6 +561,7 @@ function JobDetailModal({
         experienceLevel: experienceLevel.trim() || undefined,
         status: status || 'saved',
         requiredSkills: parsedSkills,
+        preferredSkills: parsedPreferredSkills,
         notes: notes.trim() || undefined,
         sourceUrl: sourceUrl.trim() || undefined,
       });
@@ -672,7 +698,7 @@ function JobDetailModal({
             </div>
           </div>
 
-          {/* Row 4: Skills & Posting URL */}
+          {/* Row 4: Required and preferred evidence */}
           <div className="grid grid-cols-2 gap-3">
             <Input
               label="Required Skills"
@@ -682,6 +708,17 @@ function JobDetailModal({
               hint="Comma separated."
             />
             <Input
+              label="Preferred Skills"
+              placeholder="GraphQL, Kubernetes"
+              value={preferredSkillsInput}
+              onChange={(e) => setPreferredSkillsInput(e.target.value)}
+              hint="Optional or nice-to-have."
+            />
+          </div>
+
+          {/* Row 5: Source URL */}
+          <div>
+            <Input
               label="Job Posting URL"
               placeholder="https://..."
               value={sourceUrl}
@@ -690,7 +727,7 @@ function JobDetailModal({
             />
           </div>
 
-          {/* Row 5: Personal Notes */}
+          {/* Row 6: Personal Notes */}
           <Textarea
             label="Personal Notes"
             placeholder="Recruiter contact, interview prep notes, referral source..."
@@ -789,6 +826,24 @@ function JobDetailModal({
                   <span
                     key={skill}
                     className="text-xs px-2 py-0.5 bg-ink/5 text-ink rounded-sm font-mono"
+                  >
+                    {skill}
+                  </span>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {job.preferredSkills && job.preferredSkills.length > 0 && (
+            <div className="space-y-1.5">
+              <p className="text-[10px] font-mono uppercase tracking-widest text-ink-muted font-medium">
+                Preferred Skills
+              </p>
+              <div className="flex flex-wrap gap-1.5">
+                {job.preferredSkills.map((skill) => (
+                  <span
+                    key={skill}
+                    className="text-xs px-2 py-0.5 bg-bg text-ink-muted border border-line rounded-sm font-mono"
                   >
                     {skill}
                   </span>

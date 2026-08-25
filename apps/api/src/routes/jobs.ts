@@ -11,9 +11,10 @@
 import { Router } from 'express';
 import { z } from 'zod';
 import { prisma } from '@landed/db';
+import { normalizeSkills } from '@landed/shared-types';
 import { requireAuth } from '../lib/auth.js';
 import { validate } from '../lib/validate.js';
-import { enqueueExtraction, enqueueMatchScoring } from '../lib/queue.js';
+import { enqueueExtraction } from '../lib/queue.js';
 import { computeMatchForSingleJob } from '../lib/matching-engine.js';
 import { extractJobDetails } from '../lib/job-extractor.js';
 import { resolveQuickUpdate, extractUrlFromText, inferStatusFromText } from '../lib/quick-update.js';
@@ -48,6 +49,7 @@ const CreateJobSchema = z.object({
   jobType: z.enum(['full-time', 'part-time', 'contract', 'freelance', 'internship']).optional(),
   experienceLevel: z.string().trim().max(100).optional(),
   requiredSkills: z.array(z.string().trim().max(50)).max(50, 'Cannot specify more than 50 skills').default([]),
+  preferredSkills: z.array(z.string().trim().max(50)).max(25, 'Cannot specify more than 25 preferred skills').default([]),
   description: z.string().max(20000, 'Description cannot exceed 20,000 characters').optional(),
   status: z.enum(['saved', 'applied', 'interview', 'offer', 'rejected']).default('saved'),
   notes: z.string().max(5000, 'Notes cannot exceed 5,000 characters').optional(),
@@ -63,6 +65,7 @@ const UpdateJobSchema = z.object({
   jobType: z.enum(['full-time', 'part-time', 'contract', 'freelance', 'internship']).nullable().optional(),
   experienceLevel: z.string().trim().max(100).nullable().optional(),
   requiredSkills: z.array(z.string().trim().max(50)).max(50).optional(),
+  preferredSkills: z.array(z.string().trim().max(50)).max(25).optional(),
   description: z.string().max(20000).nullable().optional(),
   status: z.enum(['saved', 'applied', 'interview', 'offer', 'rejected']).optional(),
   notes: z.string().max(5000).nullable().optional(),
@@ -162,7 +165,8 @@ jobsRouter.post('/', validate('body', CreateJobSchema), async (req, res) => {
         remoteType: data.remoteType,
         jobType: data.jobType,
         experienceLevel: data.experienceLevel,
-        requiredSkills: data.requiredSkills,
+        requiredSkills: normalizeSkills(data.requiredSkills),
+        preferredSkills: normalizeSkills(data.preferredSkills),
         description: data.description,
         status: data.status,
         notes: data.notes,
@@ -176,7 +180,6 @@ jobsRouter.post('/', validate('body', CreateJobSchema), async (req, res) => {
     const hasResume = await prisma.resume.findFirst({ where: { userId, extractionStatus: 'done' } });
     if (hasResume) {
       await computeMatchForSingleJob(userId, job.id);
-      await enqueueMatchScoring(userId, job.id).catch(() => {});
     }
 
     res.status(201).json({ job });
@@ -288,6 +291,7 @@ jobsRouter.post('/quick-update', userRateLimit(20, 60_000), validate('body', Qui
             jobType: details.jobType ?? undefined,
             experienceLevel: details.experienceLevel ?? undefined,
             requiredSkills: details.requiredSkills,
+            preferredSkills: details.preferredSkills,
             description: details.description ?? undefined,
             status,
             sourceUrl: jobUrl,
@@ -302,7 +306,6 @@ jobsRouter.post('/quick-update', userRateLimit(20, 60_000), validate('body', Qui
         });
         if (hasResume) {
           await computeMatchForSingleJob(userId, job.id);
-          await enqueueMatchScoring(userId, job.id).catch(() => {});
         }
 
         res.json({
@@ -430,13 +433,24 @@ jobsRouter.patch('/:id', validate('body', UpdateJobSchema), async (req, res) => 
         ...(data.remoteType !== undefined ? { remoteType: data.remoteType } : {}),
         ...(data.jobType !== undefined ? { jobType: data.jobType } : {}),
         ...(data.experienceLevel !== undefined ? { experienceLevel: data.experienceLevel } : {}),
-        ...(data.requiredSkills !== undefined ? { requiredSkills: data.requiredSkills } : {}),
+        ...(data.requiredSkills !== undefined ? { requiredSkills: normalizeSkills(data.requiredSkills) } : {}),
+        ...(data.preferredSkills !== undefined ? { preferredSkills: normalizeSkills(data.preferredSkills) } : {}),
         ...(data.description !== undefined ? { description: data.description } : {}),
         ...(data.status !== undefined ? { status: data.status } : {}),
         ...(data.notes !== undefined ? { notes: data.notes } : {}),
         ...(appliedAt ? { appliedAt } : {}),
       },
     });
+
+    const scoringInputsChanged =
+      data.title !== undefined ||
+      data.experienceLevel !== undefined ||
+      data.requiredSkills !== undefined ||
+      data.preferredSkills !== undefined ||
+      data.description !== undefined;
+    if (scoringInputsChanged) {
+      await computeMatchForSingleJob(userId, job.id);
+    }
 
     res.json({ job });
   } catch (err) {

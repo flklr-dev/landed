@@ -56,6 +56,7 @@ model Job {
   jobType         String?  @map("job_type") // full-time | part-time | contract | freelance | internship
   experienceLevel String?  @map("experience_level")
   requiredSkills  String[] @map("required_skills")
+  preferredSkills String[] @default([]) @map("preferred_skills")
   description     String?  @db.Text
 
   // Application state
@@ -113,9 +114,16 @@ model MatchScore {
 
   score          Float // 0–100
   explanation    String? @db.Text // AI-generated, on-demand (premium)
-  matchedSkills  String[] @map("matched_skills")
-  missingSkills  String[] @map("missing_skills")
-  computedAt     DateTime @default(now()) @map("computed_at")
+  matchedSkills       String[] @map("matched_skills")
+  missingSkills       String[] @map("missing_skills")
+  transferableSkills  String[] @default([]) @map("transferable_skills")
+  skillScore           Float? @map("skill_score")
+  preferredSkillScore  Float? @map("preferred_skill_score")
+  roleScore            Float? @map("role_score")
+  experienceScore      Float? @map("experience_score")
+  confidence           String @default("low")
+  scoringVersion       String @default("v2.2-evidence") @map("scoring_version")
+  computedAt           DateTime @default(now()) @map("computed_at")
 
   @@unique([userId, jobId])
   @@index([userId])

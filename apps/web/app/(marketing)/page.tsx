@@ -67,7 +67,7 @@ const features = [
   {
     icon: Sparkles,
     title: 'Know where you rank.',
-    body: 'Upload your resume once. Every tracked job gets a fit score based on semantic similarity — not keyword guessing.',
+    body: 'Upload your resume once. Every tracked job gets a transparent alignment score based on required evidence, related skills, role, and experience.',
   },
 ];
 
@@ -197,7 +197,7 @@ export default function LandingPage() {
             {/* Right: Match scores */}
             <div className="space-y-2">
               <p className="text-[9px] font-mono uppercase tracking-widest text-panel-fg/30 mb-4">
-                Ranked by Fit Score
+                Ranked by Resume Alignment
               </p>
               {demoMatches.map((match, i) => (
                 <div

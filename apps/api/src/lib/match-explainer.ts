@@ -19,12 +19,14 @@ export interface ExplanationInput {
     company: string;
     title: string;
     requiredSkills: string[];
+    preferredSkills?: string[];
     description?: string | null;
   };
   match: {
     score: number;
     matchedSkills: string[];
     missingSkills: string[];
+    transferableSkills?: string[];
   };
 }
 
@@ -130,7 +132,7 @@ export function generateDeterministicExplanation(input: ExplanationInput): strin
   } else if (match.missingSkills.length > 0) {
     const gaps = match.missingSkills.join(' and ');
     sections.push(
-      `**Skill Gaps & Strategy:** The role requires ${gaps}, which isn't currently on your resume. In the interview, proactively address this by discussing how you've picked up analogous technologies in past roles and outline a concrete 30-day learning plan for ${match.missingSkills[0]}.`
+      `**Skill Gaps & Strategy:** The resume does not currently show ${gaps}. If you have adjacent or direct experience, add a concrete example; otherwise discuss analogous technologies and a concrete 30-day learning plan for ${match.missingSkills[0]}.`
     );
   } else {
     sections.push(
@@ -197,12 +199,14 @@ Target Position:
 - Company: ${input.job.company}
 - Role: ${input.job.title}
 - Required Skills: ${input.job.requiredSkills.join(', ') || 'Not specified'}
+- Preferred Skills: ${input.job.preferredSkills?.join(', ') || 'Not specified'}
 - Job Description Excerpt: ${descriptionExcerpt}
 
 Match Analysis:
-- Fit Score: ${input.match.score}%
+- Resume Alignment: ${input.match.score}%
 - Matched Skills: ${input.match.matchedSkills.join(', ') || 'None'}
-- Missing Skills: ${input.match.missingSkills.join(', ') || 'None'}
+- Related/Transferable Evidence: ${input.match.transferableSkills?.join(', ') || 'None'}
+- Requirements Not Evidenced: ${input.match.missingSkills.join(', ') || 'None'}
 
 Generate the personalized 3-section interview strategy now.`;
 
@@ -373,12 +377,14 @@ export async function explainJobMatch(
       company: match.job.company,
       title: match.job.title,
       requiredSkills: match.job.requiredSkills,
+      preferredSkills: match.job.preferredSkills,
       description: match.job.description,
     },
     match: {
       score: match.score,
       matchedSkills: match.matchedSkills,
       missingSkills: match.missingSkills,
+      transferableSkills: match.transferableSkills,
     },
   });
 

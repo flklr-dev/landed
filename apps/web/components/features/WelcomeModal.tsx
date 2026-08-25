@@ -257,7 +257,7 @@ export function WelcomeModal({
                   className="text-sm text-ink-muted leading-relaxed"
                   style={{ fontFamily: 'var(--font-serif)', fontStyle: 'italic' }}
                 >
-                  Upload your resume once. Get instant 0–100% fit score rankings, matched skills, and tailored skill gap analysis for every tracked job.
+                  Upload your resume once. Get evidence-based alignment rankings, matched and related skills, and clear notes about requirements not shown on your resume.
                 </p>
               </div>
             </div>

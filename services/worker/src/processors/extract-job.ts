@@ -8,8 +8,10 @@
 
 import * as cheerio from 'cheerio';
 import { prisma } from '@landed/db';
+import { normalizeSkills } from '@landed/shared-types';
 import { extractJobFromHTML } from '../lib/llm.js';
 import { generateEmbedding } from '../lib/embeddings.js';
+import { computeMatchScores } from './parse-resume.js';
 
 interface ExtractJobData {
   jobId: string;
@@ -81,7 +83,8 @@ export async function processJobExtraction(data: ExtractJobData): Promise<void> 
         remoteType: extracted.remoteType ?? null,
         jobType: extracted.jobType ?? null,
         experienceLevel: extracted.experienceLevel ?? null,
-        requiredSkills: extracted.requiredSkills,
+        requiredSkills: normalizeSkills(extracted.requiredSkills),
+        preferredSkills: normalizeSkills(extracted.preferredSkills),
         description: extracted.description ?? null,
         extractionStatus: 'done',
       },
@@ -94,6 +97,7 @@ export async function processJobExtraction(data: ExtractJobData): Promise<void> 
       extracted.company,
       extracted.description ?? '',
       extracted.requiredSkills.join(', '),
+      extracted.preferredSkills.join(', '),
       extracted.experienceLevel ?? '',
     ].filter(Boolean).join(' — ');
 
@@ -105,6 +109,9 @@ export async function processJobExtraction(data: ExtractJobData): Promise<void> 
       `[${embedding.join(',')}]`,
       jobId,
     );
+
+    // Extraction changes scoring inputs; refresh with the shared scorer.
+    await computeMatchScores(userId, jobId);
 
     console.log(`[Extract] ✓ Completed extraction for job ${jobId}`);
 

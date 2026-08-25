@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { partitionJobSkills } from '@landed/shared-types';
 import {
   extractDeterministicJob,
   extractFromUrlSlug,
@@ -17,6 +18,7 @@ export const ExtractedJobSchema = z.object({
   jobType: z.enum(['full-time', 'part-time', 'contract', 'freelance', 'internship']).nullable().optional(),
   experienceLevel: z.string().nullable().optional(),
   requiredSkills: z.array(z.string()).default([]),
+  preferredSkills: z.array(z.string()).default([]),
   description: z.string().nullable().optional(),
 });
 
@@ -108,7 +110,8 @@ async function extractWithLLM(cleanText: string): Promise<ParsedJob | null> {
   const model = process.env.XAI_API_KEY ? 'grok-4-1' : 'gpt-4o-mini';
   const prompt = `Extract the job posting into JSON. Do not use the job board's name as the employer.
 Return only this shape:
-{"company":string,"title":string,"location":string|null,"salaryRaw":string|null,"remoteType":"remote"|"hybrid"|"onsite"|null,"jobType":"full-time"|"part-time"|"contract"|"freelance"|"internship"|null,"experienceLevel":string|null,"requiredSkills":string[],"description":string|null}`;
+{"company":string,"title":string,"location":string|null,"salaryRaw":string|null,"remoteType":"remote"|"hybrid"|"onsite"|null,"jobType":"full-time"|"part-time"|"contract"|"freelance"|"internship"|null,"experienceLevel":string|null,"requiredSkills":string[],"preferredSkills":string[],"description":string|null}
+Classify only explicit must-have qualifications as requiredSkills. Put "preferred", "nice-to-have", "bonus", or optional qualifications in preferredSkills.`;
 
   try {
     const response = await fetch(apiUrl, {
@@ -153,6 +156,7 @@ function needsOptionalEnrichment(job: ParsedJob): boolean {
 
 function finalizeJob(job: ParsedJob): ExtractedJob | null {
   if (!job.company || !job.title) return null;
+  const skills = partitionJobSkills(job.requiredSkills || [], job.preferredSkills || []);
   return ExtractedJobSchema.parse({
     company: job.company,
     title: job.title,
@@ -161,7 +165,8 @@ function finalizeJob(job: ParsedJob): ExtractedJob | null {
     remoteType: job.remoteType ?? null,
     jobType: job.jobType ?? null,
     experienceLevel: job.experienceLevel ?? null,
-    requiredSkills: job.requiredSkills || [],
+    requiredSkills: skills.requiredSkills,
+    preferredSkills: skills.preferredSkills,
     description: job.description ?? null,
   });
 }

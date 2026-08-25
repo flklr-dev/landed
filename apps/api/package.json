@@ -7,7 +7,9 @@
     "dev": "tsx watch src/server.ts",
     "build": "tsc",
     "start": "node dist/server.js",
-    "test": "tsx --test src/lib/job-extractor.test.ts src/lib/quick-update.test.ts src/routes/dashboard.test.ts src/lib/resume-parser.test.ts src/lib/matching-engine.test.ts src/lib/match-explainer.test.ts",
+    "test": "tsx --test src/lib/job-extractor.test.ts src/lib/quick-update.test.ts src/routes/dashboard.test.ts src/lib/resume-parser.test.ts src/lib/matching-engine.test.ts src/lib/match-explainer.test.ts src/lib/match-calibration.test.ts",
+    "calibrate": "tsx --test src/lib/match-calibration.test.ts",
+    "recompute-matches": "tsx src/scripts/recompute-matches.ts",
     "typecheck": "tsc --noEmit",
     "lint": "echo 'skip'"
   },

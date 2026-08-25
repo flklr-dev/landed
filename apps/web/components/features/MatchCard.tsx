@@ -1,7 +1,7 @@
 import type { JobWithMatch } from '@landed/shared-types';
 import { MatchScoreBadge } from './MatchScoreBadge';
 import { Badge } from '@/components/ui/Badge';
-import { MapPin, Check, AlertCircle, ArrowUpRight, Sparkles } from 'lucide-react';
+import { MapPin, Check, AlertCircle, ArrowUpRight, Sparkles, Shuffle } from 'lucide-react';
 
 interface MatchCardProps {
   jobWithMatch: JobWithMatch;
@@ -94,6 +94,21 @@ export function MatchCard({ jobWithMatch, rank, onOpenPrep }: MatchCardProps) {
           {/* Skills Breakdown Section */}
           {matchScore && (
             <div className="space-y-2.5">
+              <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-[10px] font-mono text-ink-muted">
+                <span title="How complete and reliable the extracted evidence is">
+                  {matchScore.confidence ?? 'low'} confidence
+                </span>
+                {matchScore.skillScore !== undefined && matchScore.skillScore !== null && (
+                  <span>required {Math.round(matchScore.skillScore)}%</span>
+                )}
+                {matchScore.roleScore !== undefined && matchScore.roleScore !== null && (
+                  <span>role {Math.round(matchScore.roleScore)}%</span>
+                )}
+                {matchScore.experienceScore !== undefined && matchScore.experienceScore !== null && (
+                  <span>experience {Math.round(matchScore.experienceScore)}%</span>
+                )}
+              </div>
+
               {/* MATCHED */}
               {matchScore.matchedSkills.length > 0 && (
                 <div>
@@ -114,11 +129,30 @@ export function MatchCard({ jobWithMatch, rank, onOpenPrep }: MatchCardProps) {
                 </div>
               )}
 
-              {/* GAPS */}
+              {matchScore.transferableSkills && matchScore.transferableSkills.length > 0 && (
+                <div>
+                  <p className="text-[10px] font-mono uppercase tracking-[0.05em] text-ink-muted font-semibold mb-1.5">
+                    RELATED EVIDENCE
+                  </p>
+                  <div className="flex flex-wrap gap-1.5">
+                    {matchScore.transferableSkills.map((skill) => (
+                      <span
+                        key={skill}
+                        className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-blue-500/10 text-blue-800 border border-blue-500/20 text-[11px] font-mono font-medium"
+                      >
+                        <Shuffle size={10} className="text-blue-700" />
+                        {skill}
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* NOT EVIDENCED */}
               {matchScore.missingSkills.length > 0 && (
                 <div>
                   <p className="text-[10px] font-mono uppercase tracking-[0.05em] text-ink-muted font-semibold mb-1.5">
-                    GAPS
+                    NOT EVIDENCED ON RESUME
                   </p>
                   <div className="flex flex-wrap gap-1.5">
                     {matchScore.missingSkills.slice(0, 5).map((skill) => (
