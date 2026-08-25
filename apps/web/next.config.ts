@@ -1,6 +1,10 @@
+import path from 'path';
 import type { NextConfig } from 'next';
 
 const nextConfig: NextConfig = {
+  turbopack: {
+    root: path.resolve(__dirname, '../../'),
+  },
   // Tailscale / LAN access to dev server (HMR, _next assets)
   allowedDevOrigins: ['100.117.225.87'],
   transpilePackages: ['@landed/shared-types'],

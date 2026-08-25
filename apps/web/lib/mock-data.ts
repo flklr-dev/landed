@@ -359,6 +359,19 @@ export const mockDashboardStats: DashboardStats = {
       timestamp: '2026-07-29T11:00:00Z',
     },
   ] satisfies ActivityEntry[],
+  weeklyAppliedCount: 3,
+  topSkills: [
+    { name: 'TypeScript', count: 6 },
+    { name: 'React', count: 5 },
+    { name: 'Next.js', count: 4 },
+    { name: 'PostgreSQL', count: 3 },
+    { name: 'TailwindCSS', count: 3 },
+  ],
+  topSavedMatches: [
+    { id: 'job-7', company: 'Figma', title: 'Frontend Engineer, Core Editor', score: 94 },
+    { id: 'job-9', company: 'Loom', title: 'Full Stack Engineer', score: 88 },
+  ],
+  hasResume: true,
 };
 
 // ── Kanban columns helper ─────────────────────────────────────────────────────

@@ -50,6 +50,7 @@ app.get('/api/health', (_req, res) => {
 app.use('/api/auth', authRouter);
 app.use('/api/jobs', jobsRouter);
 app.use('/api/matches', matchesRouter);
+app.use('/api/resumes', matchesRouter);
 app.use('/api/sse', sseRouter);
 app.use('/api/dashboard', dashboardRouter);
 
