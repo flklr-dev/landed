@@ -1,7 +1,8 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
-import { Bot, Briefcase, CheckCircle2, Send, Sparkles, X } from 'lucide-react';
+import { usePathname } from 'next/navigation';
+import { Bot, Briefcase, CheckCircle2, Send, X } from 'lucide-react';
 import { Badge } from '@/components/ui/Badge';
 import { createJob, fetchJobs, quickUpdateJob } from '@/lib/api-client';
 import type {
@@ -22,7 +23,7 @@ const INITIAL_MESSAGES: ChatMessage[] = [
   {
     id: 'welcome',
     sender: 'assistant',
-    text: 'Tell me about an application update. I can change statuses, add notes, or help track a new role.',
+    text: 'Tell me about any application update — e.g. "Got an interview with Google" or "Applied to Stripe".',
   },
 ];
 
@@ -84,27 +85,66 @@ function notifyJobChanged(type: 'updated' | 'created', job: Job) {
 }
 
 export function AIChatWidget() {
+  const pathname = usePathname();
   const [isOpen, setIsOpen] = useState(false);
   const [input, setInput] = useState('');
   const [messages, setMessages] = useState<ChatMessage[]>(INITIAL_MESSAGES);
   const [isProcessing, setIsProcessing] = useState(false);
   const [handledMessages, setHandledMessages] = useState<Set<string>>(new Set());
   const [trackedJobs, setTrackedJobs] = useState<Job[]>([]);
+  const widgetContainerRef = useRef<HTMLDivElement>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const suggestedPrompts = buildSuggestedPrompts(trackedJobs);
 
+  // Auto-close on page navigation
+  useEffect(() => {
+    setIsOpen(false);
+  }, [pathname]);
+
+  // Auto-close on click outside & Escape key
+  useEffect(() => {
+    if (!isOpen) return;
+
+    const handleClickOutside = (event: MouseEvent | TouchEvent) => {
+      if (
+        widgetContainerRef.current &&
+        !widgetContainerRef.current.contains(event.target as Node)
+      ) {
+        setIsOpen(false);
+      }
+    };
+
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        setIsOpen(false);
+      }
+    };
+
+    document.addEventListener('mousedown', handleClickOutside);
+    document.addEventListener('touchstart', handleClickOutside);
+    window.addEventListener('keydown', handleKeyDown);
+
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+      document.removeEventListener('touchstart', handleClickOutside);
+      window.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [isOpen]);
+
+  // Scroll to bottom & autofocus when opened
   useEffect(() => {
     if (!isOpen) return;
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
     inputRef.current?.focus();
   }, [messages, isOpen]);
 
+  // Keyboard shortcut: Ctrl/Cmd + K
   useEffect(() => {
     const handleShortcut = (event: KeyboardEvent) => {
       if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === 'k') {
         event.preventDefault();
-        setIsOpen(true);
+        setIsOpen((prev) => !prev);
         requestAnimationFrame(() => inputRef.current?.focus());
       }
     };
@@ -112,6 +152,7 @@ export function AIChatWidget() {
     return () => window.removeEventListener('keydown', handleShortcut);
   }, []);
 
+  // Fetch tracked jobs when widget opens to seed suggestions
   useEffect(() => {
     if (!isOpen) return;
     let cancelled = false;
@@ -223,30 +264,24 @@ export function AIChatWidget() {
     messageId: string,
     proposedChanges?: QuickUpdateProposedChanges,
   ) => {
-    if (
-      !proposedChanges?.company ||
-      isProcessing ||
-      handledMessages.has(messageId)
-    ) return;
-
+    if (!proposedChanges?.company || isProcessing || handledMessages.has(messageId)) return;
     setHandledMessages((current) => new Set(current).add(messageId));
     setIsProcessing(true);
     try {
       const response = await createJob({
         company: proposedChanges.company,
-        title: proposedChanges.title || 'Job Position',
-        status: proposedChanges.status || 'saved',
-        notes: proposedChanges.notes,
+        title: proposedChanges.title ?? 'Prospective Role',
+        status: proposedChanges.status ?? 'applied',
         location: proposedChanges.location,
-        salaryRaw: proposedChanges.salaryRaw,
-        requiredSkills: [],
+        notes: proposedChanges.notes,
       });
-      notifyJobChanged('created', response.job);
-      setTrackedJobs((current) => [response.job, ...current]);
+      const createdJob = response.job;
+      notifyJobChanged('created', createdJob);
+      setTrackedJobs((current) => [createdJob, ...current]);
       appendAssistantMessage(
-        `Added ${response.job.title} at ${response.job.company} to your tracker.`,
+        `Added ${createdJob.company} — ${createdJob.title} to your tracker as ${createdJob.status}.`,
         undefined,
-        response.job,
+        createdJob,
       );
     } catch (error) {
       setHandledMessages((current) => {
@@ -263,49 +298,51 @@ export function AIChatWidget() {
   };
 
   return (
-    <>
+    <div ref={widgetContainerRef}>
+      {/* Floating Toggle Button */}
       <button
         onClick={() => setIsOpen((current) => !current)}
         className={[
-          'fixed bottom-5 right-5 z-50 h-12 px-4 rounded-full shadow-lg',
-          'flex items-center gap-2.5 transition-all duration-200 active:scale-95',
-          isOpen
-            ? 'bg-panel text-panel-fg border border-panel-fg/20'
-            : 'bg-panel text-panel-fg hover:bg-panel/90 border border-signal/40',
+          'fixed bottom-5 right-5 z-50 h-11 px-4 rounded-full',
+          'liquid-glass-lens text-ink',
+          'flex items-center gap-2.5 transition-all duration-300 active:scale-95 cursor-pointer',
         ].join(' ')}
-        aria-label="Toggle Landed Assistant"
+        aria-label="Toggle AI Assistant"
       >
-        <Sparkles size={18} className="text-signal" />
-        <span className="font-mono text-xs uppercase tracking-wider font-medium">
-          {isOpen ? 'Close' : 'Assistant'}
+        <Bot size={17} className="text-signal" />
+        <span className="font-mono text-xs uppercase tracking-wider font-semibold text-ink">
+          {isOpen ? 'Close' : 'AI Assistant'}
         </span>
       </button>
 
+      {/* Opened Liquid Glass Popup */}
       {isOpen && (
-        <div className="fixed bottom-20 right-5 z-50 w-96 max-w-[calc(100vw-2.5rem)] h-130 max-h-[calc(100vh-7rem)] bg-panel text-panel-fg border border-panel-fg/15 shadow-2xl flex flex-col animate-fade-in-scale">
-          <div className="p-3.5 border-b border-panel-fg/10 flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              <div className="w-6 h-6 rounded-sm bg-signal/20 flex items-center justify-center">
-                <Sparkles size={13} className="text-signal" />
+        <div className="fixed bottom-18 right-5 z-50 w-96 max-w-[calc(100vw-2.5rem)] h-[440px] max-h-[calc(100vh-6rem)] liquid-glass-container text-ink rounded-2xl flex flex-col overflow-hidden animate-fade-in-scale">
+          {/* Liquid Glass Header */}
+          <div className="px-3.5 py-2.5 border-b border-white/70 bg-white/40 backdrop-blur-md flex items-center justify-between">
+            <div className="flex items-center gap-2.5">
+              <div className="w-7 h-7 rounded-lg bg-signal/15 border border-signal/30 flex items-center justify-center shadow-xs">
+                <Bot size={15} className="text-signal" />
               </div>
-              <div>
-                <h3 className="text-xs font-mono font-semibold uppercase tracking-wider">
-                  Landed Assistant
+              <div className="flex flex-col justify-center">
+                <h3 className="text-xs font-mono font-bold uppercase tracking-wider text-ink leading-tight">
+                  AI Assistant
                 </h3>
-                <p className="text-[10px] font-mono text-panel-fg/50">
-                  Application updates · Ctrl/⌘ K
+                <p className="text-[10px] font-mono text-ink-muted leading-tight mt-0.5">
+                  Update job applications quickly
                 </p>
               </div>
             </div>
             <button
               onClick={() => setIsOpen(false)}
-              className="p-1 text-panel-fg/50 hover:text-panel-fg transition-colors"
+              className="p-1 text-ink-muted hover:text-ink hover:bg-black/5 rounded-md transition-colors cursor-pointer"
               aria-label="Close assistant"
             >
-              <X size={16} />
+              <X size={15} />
             </button>
           </div>
 
+          {/* Messages Feed */}
           <div className="flex-1 p-3.5 overflow-y-auto space-y-3 font-mono text-xs">
             {messages.map((message) => {
               const handled = handledMessages.has(message.id);
@@ -315,29 +352,24 @@ export function AIChatWidget() {
                   className={`flex gap-2 ${message.sender === 'user' ? 'justify-end' : 'justify-start'}`}
                 >
                   {message.sender === 'assistant' && (
-                    <div className="w-5 h-5 rounded-full bg-signal/20 flex items-center justify-center shrink-0 mt-0.5">
+                    <div className="w-5 h-5 rounded-full bg-signal/20 border border-signal/35 flex items-center justify-center shrink-0 mt-0.5 shadow-xs">
                       <Bot size={11} className="text-signal" />
                     </div>
                   )}
 
                   <div
-                    className={`max-w-[86%] min-w-0 p-2.5 rounded-sm ${
+                    className={`max-w-[86%] min-w-0 p-2.5 rounded-xl ${
                       message.sender === 'user'
-                        ? 'bg-signal text-panel font-sans font-medium'
-                        : 'bg-panel-fg/8 text-panel-fg/90 border border-panel-fg/10'
+                        ? 'bg-ink text-bg font-sans font-medium shadow-md'
+                        : 'liquid-glass-card text-ink'
                     }`}
                   >
                     <p className="leading-relaxed wrap-break-word">{message.text}</p>
-                    {message.result?.parsedBy && (
-                      <p className="mt-1.5 text-[9px] uppercase tracking-wider text-panel-fg/35">
-                        parsed by {message.result.parsedBy}
-                      </p>
-                    )}
 
                     {message.actionJob && (
-                      <div className="mt-2 pt-2 border-t border-panel-fg/10 flex items-center gap-1.5 text-[10px] text-green-400 min-w-0">
+                      <div className="mt-2 pt-2 border-t border-black/8 flex items-center gap-1.5 text-[10px] text-emerald-700 min-w-0 font-medium">
                         <CheckCircle2 size={11} className="shrink-0" />
-                        <span className="truncate">
+                        <span className="truncate text-ink font-semibold">
                           {message.actionJob.company} · {message.actionJob.title}
                         </span>
                         <Badge
@@ -363,12 +395,12 @@ export function AIChatWidget() {
                                   message.result?.proposedChanges,
                                 )
                               }
-                              className="w-full min-w-0 p-2 text-left border border-panel-fg/15 hover:border-signal/60 hover:bg-panel-fg/5 disabled:opacity-50 transition-colors"
+                              className="w-full min-w-0 p-2 text-left bg-white/65 hover:bg-white/95 rounded-lg border border-white/80 hover:border-signal/80 shadow-xs disabled:opacity-50 transition-all cursor-pointer"
                             >
-                              <span className="block truncate font-semibold">
+                              <span className="block truncate font-bold text-ink text-xs">
                                 {candidate.title}
                               </span>
-                              <span className="block truncate text-[10px] text-panel-fg/50">
+                              <span className="block truncate text-[10px] text-ink-muted">
                                 {candidate.company} · {candidate.status}
                               </span>
                             </button>
@@ -388,7 +420,7 @@ export function AIChatWidget() {
                               message.result?.proposedChanges,
                             )
                           }
-                          className="mt-2 w-full flex items-center justify-center gap-1.5 p-2 border border-signal/40 text-signal hover:bg-signal/10 disabled:opacity-50 transition-colors"
+                          className="mt-2 w-full flex items-center justify-center gap-1.5 p-2 rounded-lg border border-signal/60 text-signal bg-signal/10 hover:bg-signal/20 disabled:opacity-50 font-bold transition-all shadow-xs cursor-pointer"
                         >
                           <Briefcase size={11} />
                           Track as new application
@@ -400,16 +432,17 @@ export function AIChatWidget() {
             })}
 
             {isProcessing && (
-              <div className="flex items-center gap-2 text-panel-fg/40 italic">
+              <div className="flex items-center gap-2 text-ink-muted italic font-medium">
                 <Bot size={11} className="animate-pulse text-signal" />
-                Understanding your update…
+                Thinking…
               </div>
             )}
             <div ref={messagesEndRef} />
           </div>
 
+          {/* Quick Prompts */}
           {suggestedPrompts.length > 0 && (
-            <div className="px-3 py-2 border-t border-panel-fg/10 bg-panel-fg/3 flex overflow-x-auto gap-1.5">
+            <div className="px-3 py-2 border-t border-white/60 bg-white/25 backdrop-blur-md flex overflow-x-auto gap-1.5 no-scrollbar">
               {suggestedPrompts.map((prompt) => (
                 <button
                   key={prompt}
@@ -418,7 +451,7 @@ export function AIChatWidget() {
                     setInput(prompt);
                     inputRef.current?.focus();
                   }}
-                  className="shrink-0 text-[9px] font-mono px-2 py-1 bg-panel-fg/8 hover:bg-panel-fg/15 text-panel-fg/70 border border-panel-fg/10 rounded-sm disabled:opacity-50 max-w-55 truncate"
+                  className="shrink-0 text-[9px] font-mono px-2.5 py-1 bg-white/70 hover:bg-white text-ink-muted hover:text-ink border border-white/90 rounded-md disabled:opacity-50 max-w-55 truncate shadow-xs transition-all cursor-pointer"
                 >
                   {prompt}
                 </button>
@@ -426,12 +459,13 @@ export function AIChatWidget() {
             </div>
           )}
 
+          {/* Input Bar */}
           <form
             onSubmit={(event) => {
               event.preventDefault();
               void handleSend();
             }}
-            className="p-3 border-t border-panel-fg/10 flex items-center gap-2"
+            className="p-3 border-t border-white/60 bg-white/40 backdrop-blur-md flex items-center gap-2"
           >
             <input
               ref={inputRef}
@@ -440,19 +474,19 @@ export function AIChatWidget() {
               disabled={isProcessing}
               onChange={(event) => setInput(event.target.value)}
               placeholder="Tell me what changed…"
-              className="flex-1 min-w-0 bg-panel-fg/5 text-panel-fg text-xs px-3 py-2 border border-panel-fg/15 rounded-sm placeholder:text-panel-fg/40 focus:outline-none focus:border-signal disabled:opacity-60"
+              className="flex-1 min-w-0 bg-white/80 text-ink text-xs px-3 py-2 border border-white/90 rounded-lg placeholder:text-ink-muted/60 focus:outline-none focus:border-ink/40 focus:ring-1 focus:ring-ink/10 disabled:opacity-60 shadow-xs transition-colors"
             />
             <button
               type="submit"
               disabled={!input.trim() || isProcessing}
               aria-label="Send message"
-              className="h-8 w-8 bg-signal text-panel rounded-sm flex items-center justify-center disabled:opacity-40 hover:bg-signal/90 transition-colors"
+              className="h-8 w-8 bg-ink text-bg rounded-lg flex items-center justify-center disabled:opacity-40 hover:bg-ink/90 shadow-sm transition-all cursor-pointer active:scale-95"
             >
               <Send size={13} />
             </button>
           </form>
         </div>
       )}
-    </>
+    </div>
   );
 }

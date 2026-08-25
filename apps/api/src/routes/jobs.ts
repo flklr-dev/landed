@@ -14,6 +14,7 @@ import { prisma } from '@landed/db';
 import { requireAuth } from '../lib/auth.js';
 import { validate } from '../lib/validate.js';
 import { enqueueExtraction, enqueueMatchScoring } from '../lib/queue.js';
+import { computeMatchForSingleJob } from '../lib/matching-engine.js';
 import { extractJobDetails } from '../lib/job-extractor.js';
 import { resolveQuickUpdate, extractUrlFromText, inferStatusFromText } from '../lib/quick-update.js';
 import { userRateLimit } from '../lib/rate-limit.js';
@@ -171,10 +172,11 @@ jobsRouter.post('/', validate('body', CreateJobSchema), async (req, res) => {
       },
     });
 
-    // If there's a resume, trigger match scoring for this new job
+    // If there's a resume, trigger match scoring for this new job immediately
     const hasResume = await prisma.resume.findFirst({ where: { userId, extractionStatus: 'done' } });
     if (hasResume) {
-      await enqueueMatchScoring(userId, job.id);
+      await computeMatchForSingleJob(userId, job.id);
+      await enqueueMatchScoring(userId, job.id).catch(() => {});
     }
 
     res.status(201).json({ job });
@@ -299,7 +301,8 @@ jobsRouter.post('/quick-update', userRateLimit(20, 60_000), validate('body', Qui
           where: { userId, extractionStatus: 'done' },
         });
         if (hasResume) {
-          await enqueueMatchScoring(userId, job.id);
+          await computeMatchForSingleJob(userId, job.id);
+          await enqueueMatchScoring(userId, job.id).catch(() => {});
         }
 
         res.json({

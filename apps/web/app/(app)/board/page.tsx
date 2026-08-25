@@ -2,7 +2,6 @@
 
 import { useState, useEffect, useRef } from 'react';
 import type { Metadata } from 'next';
-import { useSearchParams } from 'next/navigation';
 import { TopBar } from '@/components/features/TopBar';
 import { KanbanColumn } from '@/components/features/KanbanColumn';
 import { JobTable } from '@/components/features/JobTable';
@@ -848,7 +847,6 @@ function JobDetailModal({
 // ── Board Page ─────────────────────────────────────────────────────────────────
 
 export default function BoardPage() {
-  const searchParams = useSearchParams();
   const { user } = useAuth();
   const toast = useToast();
 
@@ -905,11 +903,13 @@ export default function BoardPage() {
   }, []);
 
   useEffect(() => {
-    const isNew = searchParams.get('new') === 'true';
-    if (isNew) {
-      setWelcomeOpen(true);
+    if (typeof window !== 'undefined') {
+      const params = new URLSearchParams(window.location.search);
+      if (params.get('new') === 'true') {
+        setWelcomeOpen(true);
+      }
     }
-  }, [searchParams]);
+  }, []);
 
   const statusDebounceTimers = useRef<Map<string, NodeJS.Timeout>>(new Map());
 

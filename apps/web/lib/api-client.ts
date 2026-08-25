@@ -11,6 +11,9 @@ import type {
   QuickUpdateResult,
   QuickUpdateRequest,
   DashboardStats,
+  JobWithMatch,
+  Resume,
+  MatchScore,
 } from '@landed/shared-types';
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000/api';
@@ -200,10 +203,71 @@ export async function quickUpdateJob(payload: QuickUpdateRequest): Promise<Quick
   });
 }
 
-// ── Match endpoints ──────────────────────────────────────────────────────────
+// ── Match & Resume endpoints ─────────────────────────────────────────────────
 
-export async function fetchMatches(): Promise<{ matches: Array<{ score: number; job: Job }>; hasResume: boolean }> {
-  return request('/matches');
+export interface FetchMatchesResponse {
+  matches: JobWithMatch[];
+  hasResume: boolean;
+  resumeSkills?: string[];
+  message?: string;
+}
+
+export async function fetchMatches(): Promise<FetchMatchesResponse> {
+  return request<FetchMatchesResponse>('/matches');
+}
+
+export interface FetchResumeResponse {
+  resume: Resume | null;
+  hasResume: boolean;
+}
+
+export async function fetchUserResume(): Promise<FetchResumeResponse> {
+  return request<FetchResumeResponse>('/resumes/current');
+}
+
+export async function uploadResume(
+  payload: File | { text: string; fileName?: string }
+): Promise<{ resume: Resume; message: string }> {
+  if (payload instanceof File) {
+    const token = getToken();
+    const formData = new FormData();
+    formData.append('file', payload);
+
+    const headers: Record<string, string> = {};
+    if (token) headers['Authorization'] = `Bearer ${token}`;
+
+    const response = await fetch(`${API_BASE_URL}/resumes/upload`, {
+      method: 'POST',
+      headers,
+      body: formData,
+    });
+
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({}));
+      throw new ApiError(response.status, errorData.error || 'Failed to upload resume');
+    }
+
+    return response.json();
+  } else {
+    return request<{ resume: Resume; message: string }>('/resumes/upload', {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    });
+  }
+}
+
+export async function deleteResume(): Promise<{ message: string }> {
+  return request<{ message: string }>('/resumes/current', {
+    method: 'DELETE',
+  });
+}
+
+export async function explainMatch(
+  jobId: string
+): Promise<{ explanation: string; cached: boolean }> {
+  return request<{ explanation: string; cached: boolean }>(`/matches/${jobId}/explain`, {
+    method: 'POST',
+  });
 }
 
 // ── Dashboard endpoints ──────────────────────────────────────────────────────

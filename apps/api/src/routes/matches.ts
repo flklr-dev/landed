@@ -1,88 +1,180 @@
 // ─────────────────────────────────────────────────────────────────────────────
-// Landed — Matches Routes (Premium)
-// POST /api/resumes/upload   — Upload resume PDF/DOCX → enqueue parsing
+// Landed — Matches & Resume Routes (Premium)
+// POST /api/resumes/upload   — Upload resume PDF/DOCX/TXT → Structured extraction & Match computation
+// GET  /api/resumes/current  — Get currently uploaded resume and parsed skills
+// DELETE /api/resumes/current — Delete resume and associated match scores
 // GET  /api/matches          — Get ranked job matches for user's resume
 // POST /api/matches/:jobId/explain — Generate AI explanation (premium, on-demand)
 // ─────────────────────────────────────────────────────────────────────────────
 
 import { Router } from 'express';
+import multer from 'multer';
 import { prisma } from '@landed/db';
 import { requireAuth } from '../lib/auth.js';
-import { enqueueResumeParse, enqueueMatchScoring } from '../lib/queue.js';
+import {
+  extractTextFromFileBuffer,
+  parseResume,
+  normalizeSkill,
+} from '../lib/resume-parser.js';
+import { computeMatchesForUser, computeMatchForSingleJob } from '../lib/matching-engine.js';
+import { explainJobMatch } from '../lib/match-explainer.js';
 
 export const matchesRouter = Router();
 
 // All match routes require authentication
 matchesRouter.use(requireAuth);
 
-// ── POST /api/resumes/upload ─────────────────────────────────────────────────
-// For now, stores the file locally. Phase 3 will use S3.
+// Configure multer for in-memory document parsing (10MB max)
+const upload = multer({
+  storage: multer.memoryStorage(),
+  limits: {
+    fileSize: 10 * 1024 * 1024, // 10MB
+  },
+});
 
-matchesRouter.post('/resumes/upload', async (req, res) => {
+// ── Helper: Process and Upsert Resume ────────────────────────────────────────
+
+async function processAndSaveResume(
+  userId: string,
+  rawText: string,
+  fileName: string,
+  fileUrl?: string
+) {
+  if (!rawText || rawText.trim().length < 20) {
+    throw new Error('Resume content is too short to extract candidate information.');
+  }
+
+  // 1. Extract structured candidate skills, roles, experience
+  const parsed = await parseResume(rawText);
+
+  // 2. Delete any old resume record for this user (1 active resume per user)
+  await prisma.resume.deleteMany({ where: { userId } });
+
+  // 3. Create fresh resume record in PostgreSQL
+  const resume = await prisma.resume.create({
+    data: {
+      userId,
+      fileName,
+      fileUrl: fileUrl || null,
+      parsedSkills: parsed.skills,
+      parsedRoles: parsed.roles,
+      yearsOfExperience: parsed.yearsOfExperience ?? null,
+      extractionStatus: 'done',
+    },
+  });
+
+  // 4. Immediately calculate match scores against all active tracked jobs
+  await computeMatchesForUser(userId);
+
+  return { resume, parsed };
+}
+
+// ── POST /resumes/upload & POST /upload ───────────────────────────────────────
+
+const handleResumeUpload = async (req: any, res: any) => {
   try {
     const userId = req.user!.userId;
+    let rawText = '';
+    let fileName = 'resume.txt';
+    let fileUrl: string | undefined;
 
-    // TODO: Integrate multer for actual file upload handling
-    // For now, accept a fileUrl in the body (e.g., from a client-side upload)
-    const { fileName, fileUrl } = req.body as { fileName: string; fileUrl: string };
+    if (req.file) {
+      // Multipart file upload (PDF, DOCX, TXT)
+      fileName = req.file.originalname || 'resume.pdf';
+      rawText = await extractTextFromFileBuffer(
+        req.file.buffer,
+        req.file.mimetype,
+        fileName
+      );
+    } else if (req.body) {
+      // JSON body upload (raw text or pasted resume)
+      const body = req.body as { text?: string; fileName?: string; fileUrl?: string };
+      rawText = body.text || '';
+      if (body.fileName) fileName = body.fileName;
+      if (body.fileUrl) fileUrl = body.fileUrl;
+    }
 
-    if (!fileName || !fileUrl) {
-      res.status(400).json({ error: 'fileName and fileUrl are required' });
+    if (!rawText || rawText.trim().length < 20) {
+      res.status(400).json({
+        error: 'Please provide a valid resume file (.pdf, .docx, .txt) or text content with at least 20 characters.',
+      });
       return;
     }
 
-    // Upsert — one resume per user for v1 simplicity
-    const resume = await prisma.resume.upsert({
-      where: {
-        // Use a raw query to find by userId since it's not @unique
-        // For now, create a new one and delete old ones
-        id: 'placeholder',
-      },
-      create: {
-        userId,
-        fileName,
-        fileUrl,
-        parsedSkills: [],
-        parsedRoles: [],
-        extractionStatus: 'pending',
-      },
-      update: {
-        fileName,
-        fileUrl,
-        parsedSkills: [],
-        parsedRoles: [],
-        extractionStatus: 'pending',
-      },
-    }).catch(async () => {
-      // Upsert workaround: delete existing, create new
-      await prisma.resume.deleteMany({ where: { userId } });
-      return prisma.resume.create({
-        data: {
-          userId,
-          fileName,
-          fileUrl,
-          parsedSkills: [],
-          parsedRoles: [],
-          extractionStatus: 'pending',
-        },
-      });
+    const { resume, parsed } = await processAndSaveResume(userId, rawText, fileName, fileUrl);
+
+    res.status(200).json({
+      resume,
+      parsed,
+      message: 'Resume parsed and matches calculated successfully.',
+    });
+  } catch (err: any) {
+    console.error('[Matches] Resume upload error:', err);
+    res.status(500).json({
+      error: err.message || 'Failed to parse and store resume.',
+    });
+  }
+};
+
+matchesRouter.post('/resumes/upload', upload.single('file'), handleResumeUpload);
+matchesRouter.post('/upload', upload.single('file'), handleResumeUpload);
+
+// ── GET /resumes/current & GET /current ───────────────────────────────────────
+
+const handleGetCurrentResume = async (req: any, res: any) => {
+  try {
+    const userId = req.user!.userId;
+
+    const resume = await prisma.resume.findFirst({
+      where: { userId },
+      orderBy: { uploadedAt: 'desc' },
     });
 
-    // Enqueue resume parsing
-    await enqueueResumeParse(resume.id, fileUrl, userId);
+    if (!resume) {
+      res.json({
+        resume: null,
+        hasResume: false,
+      });
+      return;
+    }
 
-    res.status(202).json({
+    res.json({
       resume,
-      message: 'Resume upload received. Parsing queued.',
+      hasResume: true,
     });
   } catch (err) {
-    console.error('[Matches] Upload error:', err);
-    res.status(500).json({ error: 'Failed to upload resume' });
+    console.error('[Matches] Get current resume error:', err);
+    res.status(500).json({ error: 'Failed to fetch active resume.' });
   }
-});
+};
+
+matchesRouter.get('/resumes/current', handleGetCurrentResume);
+matchesRouter.get('/current', handleGetCurrentResume);
+
+// ── DELETE /resumes/current & DELETE /current ─────────────────────────────────
+
+const handleDeleteCurrentResume = async (req: any, res: any) => {
+  try {
+    const userId = req.user!.userId;
+
+    await prisma.resume.deleteMany({ where: { userId } });
+    await prisma.matchScore.deleteMany({ where: { userId } });
+
+    res.json({
+      message: 'Resume and match calculations removed successfully.',
+    });
+  } catch (err) {
+    console.error('[Matches] Delete resume error:', err);
+    res.status(500).json({ error: 'Failed to delete resume.' });
+  }
+};
+
+matchesRouter.delete('/resumes/current', handleDeleteCurrentResume);
+matchesRouter.delete('/current', handleDeleteCurrentResume);
 
 // ── GET /api/matches ─────────────────────────────────────────────────────────
-// Returns all tracked jobs ranked by match score (descending).
+
+const ACTIVE_MATCH_STATUSES = ['saved', 'applied', 'interview'];
 
 matchesRouter.get('/', async (req, res) => {
   try {
@@ -91,25 +183,79 @@ matchesRouter.get('/', async (req, res) => {
     // Check if user has a parsed resume
     const resume = await prisma.resume.findFirst({
       where: { userId, extractionStatus: 'done' },
+      orderBy: { uploadedAt: 'desc' },
     });
 
     if (!resume) {
+      // Return user's active jobs without match scores (max 10)
+      const jobs = await prisma.job.findMany({
+        where: {
+          userId,
+          status: { in: ACTIVE_MATCH_STATUSES },
+        },
+        orderBy: { updatedAt: 'desc' },
+        take: 10,
+      });
+
+      const matches = jobs.map((job) => ({
+        ...job,
+        matchScore: undefined,
+      }));
+
       res.json({
-        matches: [],
-        message: 'Upload a resume to see match scores.',
+        matches,
+        message: 'Upload a resume in Best Matches to calculate compatibility scores.',
         hasResume: false,
       });
       return;
     }
 
-    // Get all match scores for this user, joined with job data
-    const matches = await prisma.matchScore.findMany({
-      where: { userId },
-      include: {
-        job: true,
+    // Fetch all active jobs (saved, applied, interview) with their associated MatchScore
+    let jobsWithScores = await prisma.job.findMany({
+      where: {
+        userId,
+        status: { in: ACTIVE_MATCH_STATUSES },
       },
-      orderBy: { score: 'desc' },
+      include: {
+        matches: {
+          where: { userId },
+          take: 1,
+        },
+      },
     });
+
+    // Auto-compute scores on-the-fly for any newly added jobs missing a matchScore
+    const uncomputedJobs = jobsWithScores.filter((job) => !job.matches || job.matches.length === 0);
+    if (uncomputedJobs.length > 0) {
+      await Promise.all(
+        uncomputedJobs.map(async (job) => {
+          await computeMatchForSingleJob(userId, job.id);
+        })
+      );
+
+      // Refetch with updated match scores
+      jobsWithScores = await prisma.job.findMany({
+        where: {
+          userId,
+          status: { in: ACTIVE_MATCH_STATUSES },
+        },
+        include: {
+          matches: {
+            where: { userId },
+            take: 1,
+          },
+        },
+      });
+    }
+
+    // Rank by match score descending and cap at top 10
+    const matches = jobsWithScores
+      .map((job) => ({
+        ...job,
+        matchScore: job.matches[0] || undefined,
+      }))
+      .sort((a, b) => (b.matchScore?.score ?? -1) - (a.matchScore?.score ?? -1))
+      .slice(0, 10);
 
     res.json({
       matches,
@@ -123,45 +269,18 @@ matchesRouter.get('/', async (req, res) => {
 });
 
 // ── POST /api/matches/:jobId/explain ─────────────────────────────────────────
-// On-demand LLM call to generate a human-readable explanation of the score.
-// This is the part gated behind premium — it's per-request LLM cost.
 
 matchesRouter.post('/:jobId/explain', async (req, res) => {
   try {
     const userId = req.user!.userId;
     const { jobId } = req.params;
 
-    // Check premium status
-    const user = await prisma.user.findUnique({ where: { id: userId } });
-    if (user?.plan !== 'premium') {
-      res.status(403).json({ error: 'Match explanations require a Premium plan.' });
-      return;
-    }
-
-    // Check if match score exists
-    const match = await prisma.matchScore.findUnique({
-      where: { userId_jobId: { userId, jobId } },
-      include: { job: true },
-    });
-
-    if (!match) {
-      res.status(404).json({ error: 'No match score found for this job. Ensure resume is uploaded.' });
-      return;
-    }
-
-    // If explanation already exists, return it (cached)
-    if (match.explanation) {
-      res.json({ explanation: match.explanation, cached: true });
-      return;
-    }
-
-    // TODO: Call Grok 4.1 for explanation generation
-    // For now, return a placeholder that will be replaced by the worker
-    res.status(202).json({
-      message: 'Explanation generation is being implemented. Check back soon.',
-    });
-  } catch (err) {
+    const result = await explainJobMatch(userId, jobId);
+    res.json(result);
+  } catch (err: any) {
     console.error('[Matches] Explain error:', err);
-    res.status(500).json({ error: 'Failed to generate explanation' });
+    res.status(err.message?.includes('No match score') ? 404 : 500).json({
+      error: err.message || 'Failed to generate match breakdown.',
+    });
   }
 });
